@@ -997,11 +997,11 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.shopping_cart_outlined,
-                            size: 48, color: Colors.grey.shade400),
-                        const SizedBox(height: 8),
-                        const Text('No items added',
-                            style: TextStyle(color: Colors.grey)),
-                        const SizedBox(height: 4),
+                            size: 25,color: Colors.grey.shade400),
+                        // const SizedBox(height: 8),
+                        // const Text('No items added',
+                        //     style: TextStyle(color: Colors.grey)),
+                        // const SizedBox(height: 4),
                         // Text(
                         //   'Search → QTY → T.P → R.P → DIS% → Search',
                         //   style: TextStyle(

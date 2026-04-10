@@ -204,146 +204,121 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
-      body: Column(
-        children: [
-          // Header with Report Selection
-          _buildHeader(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
           
-          // Report Content
-          Expanded(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: _getSelectedReportWidget(),
-            ),
-          ),
-        ],
+          // ════════════════════════════════════════════════════════════════
+          // MOBILE LAYOUT (< 600px)
+          // ════════════════════════════════════════════════════════════════
+          if (width < 600) {
+            return _buildMobileLayout();
+          }
+          
+          // ════════════════════════════════════════════════════════════════
+          // TABLET & DESKTOP LAYOUT (> 600px) - All use top navigation now
+          // ════════════════════════════════════════════════════════════════
+          return _buildDesktopLayout();
+        },
       ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HEADER
+  // 📱 MOBILE LAYOUT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Title Row with Dropdown
-          Row(
-            children: [
-              // Title & Dropdown
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [currentReport.color, currentReport.color.withOpacity(0.7)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(currentReport.icon, color: Colors.white, size: 22),
+  Widget _buildMobileLayout() {
+    return Column(
+      children: [
+        // Mobile Header
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(width: 12),
-              
-              // Report Dropdown
-              Expanded(
-                child: _buildReportDropdown(),
-              ),
-              
-              const SizedBox(width: 16),
-              
-              // Action Buttons
-              _buildActionButton(Icons.refresh, 'Refresh', () {}),
-              const SizedBox(width: 8),
-              _buildActionButton(Icons.print_outlined, 'Print', () {}),
-              const SizedBox(width: 8),
-              _buildActionButton(Icons.download_outlined, 'Export', () {}),
             ],
           ),
-          
-          const SizedBox(height: 16),
-          
-          // Category Filter Chips
-          _buildCategoryChips(),
-          
-          const SizedBox(height: 12),
-          
-          // Report Cards
-          SizedBox(
-            height: 90,
-            child: _buildReportCards(),
+          child: Column(
+            children: [
+              // Dropdown + Actions Row
+              Row(
+                children: [
+                  // Report Icon
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [currentReport.color, currentReport.color.withOpacity(0.7)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(currentReport.icon, color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  
+                  // Dropdown
+                  Expanded(child: _buildMobileDropdown()),
+                  
+                  const SizedBox(width: 8),
+                  
+                  // Actions
+                  _buildMobileActionButton(Icons.refresh),
+                  const SizedBox(width: 4),
+                  _buildMobileActionButton(Icons.more_vert),
+                ],
+              ),
+              
+              const SizedBox(height: 10),
+              
+              // Category Chips
+              _buildMobileCategoryChips(),
+            ],
           ),
-        ],
-      ),
+        ),
+        
+        // Report Content
+        Expanded(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: _getSelectedReportWidget(),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildReportDropdown() {
+  Widget _buildMobileDropdown() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selectedReport,
           isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: currentReport.color),
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1E293B),
-          ),
-          items: allReports.map((report) {
+          icon: Icon(Icons.keyboard_arrow_down, color: currentReport.color, size: 18),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+          items: filteredReports.map((report) {
             return DropdownMenuItem<String>(
               value: report.id,
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: report.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(report.icon, size: 16, color: report.color),
-                  ),
-                  const SizedBox(width: 10),
+                  Icon(report.icon, size: 14, color: report.color),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          report.name,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                        Text(
-                          report.description,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF94A3B8),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    child: Text(
+                      report.name,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -354,15 +329,15 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
             if (value != null) _selectReport(value);
           },
           selectedItemBuilder: (context) {
-            return allReports.map((report) {
+            return filteredReports.map((report) {
               return Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   report.name,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: report.id == selectedReport ? currentReport.color : const Color(0xFF1E293B),
+                    color: currentReport.color,
                   ),
                 ),
               );
@@ -373,26 +348,19 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildActionButton(IconData icon, String tooltip, VoidCallback onTap) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
+  Widget _buildMobileActionButton(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Icon(icon, size: 18, color: const Color(0xFF64748B)),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
+      child: Icon(icon, size: 16, color: const Color(0xFF64748B)),
     );
   }
 
-  Widget _buildCategoryChips() {
+  Widget _buildMobileCategoryChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -403,56 +371,40 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               : allReports.where((r) => r.category == category.id).length;
 
           return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: InkWell(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
               onTap: () => setState(() => selectedCategory = category.id),
-              borderRadius: BorderRadius.circular(20),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: isSelected ? category.color : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isSelected ? category.color : const Color(0xFFE2E8F0),
                   ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: category.color.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      category.icon,
-                      size: 14,
-                      color: isSelected ? Colors.white : const Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 6),
                     Text(
                       category.name,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: isSelected ? Colors.white : const Color(0xFF64748B),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: isSelected ? Colors.white.withOpacity(0.2) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '$count',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: isSelected ? Colors.white : const Color(0xFF94A3B8),
                         ),
@@ -468,101 +420,328 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildReportCards() {
-    return ListView.builder(
-      scrollDirection: Axis.horizontal,
-      itemCount: filteredReports.length,
-      itemBuilder: (context, index) {
-        final report = filteredReports[index];
-        final isSelected = selectedReport == report.id;
 
-        return GestureDetector(
-          onTap: () => _selectReport(report.id),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 180,
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSelected ? report.color.withOpacity(0.1) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? report.color : const Color(0xFFE2E8F0),
-                width: isSelected ? 2 : 1,
+
+// Replace the entire _buildDesktopLayout method with this fixed version:
+
+Widget _buildDesktopLayout() {
+  return Column(
+    children: [
+      // ═══════════════════════════════════════════════════════════════
+      // TOP HEADER BAR
+      // ═══════════════════════════════════════════════════════════════
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Logo/Title Section
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [currentReport.color, currentReport.color.withOpacity(0.7)],
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: report.color.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+              child: Icon(currentReport.icon, color: Colors.white, size: 24),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: report.color.withOpacity(isSelected ? 0.2 : 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    report.icon,
-                    size: 20,
-                    color: report.color,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        report.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? report.color : const Color(0xFF1E293B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        report.description,
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: isSelected ? report.color.withOpacity(0.7) : const Color(0xFF94A3B8),
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                if (isSelected)
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: report.color,
-                      shape: BoxShape.circle,
+            const SizedBox(width: 16),
+            
+            // Report Title & Description
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    currentReport.name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
                     ),
-                    child: const Icon(Icons.check, size: 10, color: Colors.white),
                   ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    currentReport.description,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            
+            // Action Buttons
+            _buildActionButton(Icons.refresh, 'Refresh', () {}),
+            const SizedBox(width: 8),
+            _buildActionButton(Icons.print_outlined, 'Print', () {}),
+            const SizedBox(width: 8),
+            _buildActionButton(Icons.download_outlined, 'Export', () {}),
+            const SizedBox(width: 12),
+            
+            // Generate Button
+            Material(
+              color: currentReport.color,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: () {},
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.play_arrow, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Generate',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      
+      // ═══════════════════════════════════════════════════════════════
+      // CATEGORY TABS & REPORT SELECTION
+      // ═══════════════════════════════════════════════════════════════
+      Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE2E8F0)),
           ),
-        );
-      },
+        ),
+        child: Column(
+          children: [
+            // Category Tabs
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: categories.map((category) {
+                  final isSelected = selectedCategory == category.id;
+                  final count = category.id == 'all'
+                      ? allReports.length
+                      : allReports.where((r) => r.category == category.id).length;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => setState(() => selectedCategory = category.id),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected ? category.color : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? category.color : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              category.icon,
+                              size: 16,
+                              color: isSelected ? Colors.white : const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              category.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? Colors.white : const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isSelected 
+                                    ? Colors.white.withOpacity(0.25) 
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$count',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            
+            // Report Cards - Horizontal Scroll - FIXED HEIGHT
+            SizedBox(
+              height: 100, // Increased from 90 to 100
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16, top: 8),
+                itemCount: filteredReports.length,
+                itemBuilder: (context, index) {
+                  final report = filteredReports[index];
+                  final isSelected = selectedReport == report.id;
+                  
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Material(
+                      color: isSelected 
+                          ? report.color.withOpacity(0.1) 
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () => _selectReport(report.id),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: 240, // Increased from 220 to 240 for more space
+                          padding: const EdgeInsets.all(12), // Reduced from 14 to 12
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              width: isSelected ? 2 : 1,
+                              color: isSelected 
+                                  ? report.color 
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // Icon
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: report.color.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(report.icon, size: 20, color: report.color),
+                              ),
+                              const SizedBox(width: 12),
+                              
+                              // Text Content - FIXED with Flexible
+                              Flexible(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min, // Important!
+                                  children: [
+                                    Text(
+                                      report.name,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected 
+                                            ? report.color 
+                                            : const Color(0xFF1E293B),
+                                        height: 1.2, // Control line height
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 3), // Reduced spacing
+                                    Text(
+                                      report.description,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isSelected
+                                            ? report.color.withOpacity(0.7)
+                                            : const Color(0xFF94A3B8),
+                                        height: 1.2, // Control line height
+                                      ),
+                                      maxLines: 2, // Allow 2 lines for description
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Check Icon
+                              if (isSelected) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: report.color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check, 
+                                    size: 12, 
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      
+      // ═══════════════════════════════════════════════════════════════
+      // REPORT CONTENT - FULL HEIGHT
+      // ═══════════════════════════════════════════════════════════════
+      Expanded(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: _getSelectedReportWidget(),
+        ),
+      ),
+    ],
+  );
+}
+
+  Widget _buildActionButton(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Icon(icon, size: 20, color: const Color(0xFF64748B)),
+        ),
+      ),
     );
   }
 
@@ -588,20 +767,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                 color: currentReport.color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                currentReport.icon,
-                size: 48,
-                color: currentReport.color,
-              ),
+              child: Icon(currentReport.icon, size: 48, color: currentReport.color),
             ),
             const SizedBox(height: 24),
             Text(
               currentReport.name,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B),
-              ),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
             ),
             const SizedBox(height: 8),
             Container(
@@ -615,14 +786,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                 children: [
                   Icon(Icons.construction, size: 16, color: Color(0xFFD97706)),
                   SizedBox(width: 6),
-                  Text(
-                    'Coming Soon',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFD97706),
-                    ),
-                  ),
+                  Text('Coming Soon', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFD97706))),
                 ],
               ),
             ),
@@ -631,23 +795,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Text(
                 currentReport.description,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF94A3B8),
-                ),
+                style: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
                 textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => _selectReport('customer_ledger'),
-              icon: const Icon(Icons.arrow_back, size: 16),
-              label: const Text('Go to Customer Ledger'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: currentReport.color,
-                side: BorderSide(color: currentReport.color),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ],
@@ -667,12 +816,7 @@ class ReportCategory {
   final IconData icon;
   final Color color;
 
-  ReportCategory({
-    required this.id,
-    required this.name,
-    required this.icon,
-    required this.color,
-  });
+  ReportCategory({required this.id, required this.name, required this.icon, required this.color});
 }
 
 class ReportItem {

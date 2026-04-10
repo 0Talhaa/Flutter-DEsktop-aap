@@ -194,7 +194,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           elevation: 0,
                         ),
-                        child: const Text('Add Another'),
+                        child: const Text('Add Another', style: TextStyle(color: Colors.white)),
                       ),
                     ),
                   ],
@@ -352,41 +352,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Financial Card
-                    _buildSectionCard(
-                      title: 'Financial Information',
-                      icon: Icons.account_balance_wallet_outlined,
-                      iconColor: const Color(0xFF10B981),
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                controller: _balanceController,
-                                label: 'Opening Balance',
-                                hint: '0',
-                                icon: Icons.account_balance_outlined,
-                                keyboardType: TextInputType.number,
-                                prefix: 'Rs.',
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildTextField(
-                                controller: TextEditingController(),
-                                label: 'Credit Limit',
-                                hint: '0',
-                                icon: Icons.credit_score_outlined,
-                                keyboardType: TextInputType.number,
-                                prefix: 'Rs.',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildBalanceIndicator(),
-                      ],
-                    ),
+                 
                     const SizedBox(height: 20),
 
                     // Notes Card

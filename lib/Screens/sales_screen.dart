@@ -47,8 +47,7 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   final TextEditingController invoiceController = TextEditingController();
   final TextEditingController dateController = TextEditingController();
   final TextEditingController customerNameController = TextEditingController();
-  final TextEditingController customerBalanceController =
-      TextEditingController();
+  final TextEditingController customerBalanceController = TextEditingController();
   final TextEditingController searchController = TextEditingController();
   final TextEditingController amountPaidController = TextEditingController();
 
@@ -272,10 +271,11 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   //  MISC HELPERS
   // ══════════════════════════════════════════════════════════════
   void _onAmountPaidChanged() => setState(() {});
-  void _generateInvoiceNumber() {
-    final now = DateTime.now();
-    invoiceController.text = '${now.millisecondsSinceEpoch % 100000}';
-  }
+ Future<void> _generateInvoiceNumber() async {
+  int nextNumber = await DatabaseHelper.instance.getLastInvoiceNumber();
+
+  invoiceController.text = '-${nextNumber.toString().padLeft(4, '0')}';
+}
 
   void _setCurrentDate() {
     dateController.text = DateFormat('dd/MM/yyyy').format(DateTime.now());
@@ -306,23 +306,45 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   double get amountAfterDiscount => subtotalAmount - totalDiscount;
   double get taxAmount => amountAfterDiscount * 0.0;
   double get saleAmount => amountAfterDiscount + taxAmount;
-  double get previousBalance => 
-    _loadedPreviousBalance ?? selectedCustomer?.openingBalance ?? 0.0;
+  double get previousBalance =>
+      _loadedPreviousBalance ?? selectedCustomer?.openingBalance ?? 0.0;
   double get totalDue => previousBalance + saleAmount;
   double get amountPaid => double.tryParse(amountPaidController.text) ?? 0.0;
   double get remainingBalance => totalDue - amountPaid;
 
-  Map<String, double> _calculateBalances() => {
-        'subtotal': subtotalAmount,
-        'discount': totalDiscount,
-        'amountAfterDiscount': amountAfterDiscount,
-        'tax': taxAmount,
-        'saleAmount': saleAmount,
-        'previousBalance': previousBalance,
-        'totalDue': totalDue,
-        'amountPaid': amountPaid,
-        'remainingBalance': remainingBalance,
-      };
+Map<String, double> _calculateBalances() {
+  double subtotal = subtotalAmount;
+
+  double discount = totalDiscount;
+
+  double afterDiscount = subtotal - discount;
+
+  double tax = taxAmount;
+
+  double sale = afterDiscount + tax;
+
+  double prev = previousBalance;
+
+  double due = prev + sale;
+
+  double paid = double.tryParse(amountPaidController.text) ?? 0;
+
+  double remaining = due - paid;
+
+  if (remaining < 0) remaining = 0;
+
+  return {
+    'subtotal': subtotal,
+    'discount': discount,
+    'amountAfterDiscount': afterDiscount,
+    'tax': tax,
+    'saleAmount': sale,
+    'previousBalance': prev,
+    'totalDue': due,
+    'amountPaid': paid,
+    'remainingBalance': remaining,
+  };
+}
 
   // ══════════════════════════════════════════════════════════════
   //  FOCUS NODE FACTORIES
@@ -1741,19 +1763,12 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
                   child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                      Icon(Icons.shopping_cart_outlined,
-                          size: 40, color: Colors.grey.shade400),
-                      const SizedBox(height: 8),
+                      // Icon(Icons.shopping_cart_outlined,
+                      //     size: 40, color: Colors.grey.shade400),
+                      // const SizedBox(height: 8),
                       const Text('No items added',
                           style: TextStyle(color: Colors.grey, fontSize: 15)),
-                      const SizedBox(height: 4),
-                      Text(
-                          mobile
-                              ? 'Tap the search button to add items'
-                              : 'Search → Enter → QTY → Enter → DIS → Enter',
-                          style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11),
-                          textAlign: TextAlign.center),
+                     
                     ]))
               : ListView.builder(
                   itemCount: cart.length,
@@ -3098,7 +3113,8 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
         }
 
         amountPaidController.text = (sale['amountPaid'] ?? 0).toString();
-        _loadedPreviousBalance = (sale['previousBalance'] as num?)?.toDouble() ?? 0.0;
+        _loadedPreviousBalance =
+            (sale['previousBalance'] as num?)?.toDouble() ?? 0.0;
         _isSaleCompleted = true;
         _isEditMode = false;
         selectedCartIndex = -1;

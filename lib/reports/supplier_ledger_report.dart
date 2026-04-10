@@ -255,13 +255,13 @@ void initState() {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade300),
+            Icon(Icons.receipt_long, size: 30 ,color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            Text(
-              'Select a supplier and click\n"Generate Ledger" to view full report',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-            ),
+            // Text(
+            //   'Select a supplier and click\n"Generate Ledger" to view full report',
+            //   textAlign: TextAlign.center,
+            //   style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            // ),
           ],
         ),
       ),

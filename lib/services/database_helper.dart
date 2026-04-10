@@ -1869,6 +1869,22 @@ class DatabaseHelper {
     return (result.first['total'] as num).toDouble();
   }
 
+  Future<int> getLastInvoiceNumber() async {
+  final db = await database;
+
+  final result = await db.rawQuery(
+    "SELECT invoiceId FROM sales ORDER BY id DESC LIMIT 1"
+  );
+
+  if (result.isEmpty) return 1;
+
+  String lastInvoice = result.first['invoiceId'].toString();
+
+  int number = int.tryParse(lastInvoice.replaceAll('INV-', '')) ?? 0;
+
+  return number + 1;
+}
+
   // ============================================================================
   // CATEGORIES CRUD OPERATIONS
   // ============================================================================
