@@ -7,7 +7,9 @@ import 'package:medical_app/Screens/items_screen.dart';
 import 'package:medical_app/Screens/master_data_screen.dart';
 import 'package:medical_app/Screens/purchase_entry_screen.dart';
 import 'package:medical_app/Screens/settings_screen.dart';
+import 'package:medical_app/Screens/supplier_payment_by_invoice_screen.dart';
 import 'package:medical_app/Screens/supplier_screen.dart';
+import 'package:medical_app/reports/supplier_ledger_report_invoice_based.dart';
 import 'package:medical_app/services/database_helper.dart';
 import 'package:medical_app/Screens/addItemScreen.dart';
 import 'package:medical_app/Screens/add_customer_screen.dart';
@@ -16,7 +18,7 @@ import 'package:medical_app/reports/inventory_screen.dart';
 import 'package:medical_app/Screens/expense_entry_screen.dart';
 import 'package:medical_app/Screens/reports_screen.dart';
 import 'package:medical_app/Screens/sale_history_screen.dart';
-import 'package:medical_app/Screens/daily_closing_screen.dart';
+// import 'package:medical_app/Screens/daily_closing_screen.dart';
 
 class PremiumDashboardScreen extends StatefulWidget {
   const PremiumDashboardScreen({super.key});
@@ -31,21 +33,108 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
   Key _refreshKey = UniqueKey(); // Add this key for refreshing
 
   final List<Map<String, dynamic>> sidebarItems = [
-    {'title': 'Dashboard', 'icon': Icons.grid_view_outlined, 'activeIcon': Icons.grid_view},
-    {'title': 'Inventory', 'icon': Icons.inventory_2_outlined, 'activeIcon': Icons.inventory_2},
-    {'title': 'Add Item', 'icon': Icons.add_circle_outline, 'activeIcon': Icons.add_circle},
-    {'title': 'Items', 'icon': Icons.list_alt_outlined, 'activeIcon': Icons.list_alt},
-    {'title': 'Customers', 'icon': Icons.people_outline, 'activeIcon': Icons.people},
-    {'title': 'Suppliers', 'icon': Icons.local_shipping_outlined, 'activeIcon': Icons.local_shipping},
-    {'title': 'Sales', 'icon': Icons.point_of_sale_outlined, 'activeIcon': Icons.point_of_sale},
-    {'title': 'Payments', 'icon': Icons.payments_outlined, 'activeIcon': Icons.payments},
-    {'title': 'Purchases', 'icon': Icons.shopping_cart_outlined, 'activeIcon': Icons.shopping_cart},
-    {'title': 'Expenses', 'icon': Icons.account_balance_wallet_outlined, 'activeIcon': Icons.account_balance_wallet},
-    {'title': 'Reports', 'icon': Icons.assessment_outlined, 'activeIcon': Icons.assessment},
-    {'title': 'Sale History', 'icon': Icons.history, 'activeIcon': Icons.history},
-    {'title': 'Daily Closing', 'icon': Icons.calendar_today_outlined, 'activeIcon': Icons.calendar_today},
-    {'title': 'Master Data', 'icon': Icons.storage_outlined, 'activeIcon': Icons.storage},
-    {'title': 'Bulk Upload', 'icon': Icons.upload_file_outlined, 'activeIcon': Icons.upload_file},
+    // DASHBOARD
+    {
+      'title': 'Dashboard',
+      'icon': Icons.grid_view_outlined,
+      'activeIcon': Icons.grid_view
+    },
+
+    // INVENTORY MANAGEMENT
+    {
+      'title': 'Inventory',
+      'icon': Icons.inventory_2_outlined,
+      'activeIcon': Icons.inventory_2
+    },
+    {
+      'title': 'Add Item',
+      'icon': Icons.add_circle_outline,
+      'activeIcon': Icons.add_circle
+    },
+    {
+      'title': 'Items',
+      'icon': Icons.list_alt_outlined,
+      'activeIcon': Icons.list_alt
+    },
+
+    // CUSTOMER MANAGEMENT
+    {
+      'title': 'Customers',
+      'icon': Icons.people_outline,
+      'activeIcon': Icons.people
+    },
+
+    // SALES MANAGEMENT
+    {
+      'title': 'Sales',
+      'icon': Icons.point_of_sale_outlined,
+      'activeIcon': Icons.point_of_sale
+    },
+    {
+      'title': 'Sale History',
+      'icon': Icons.history_outlined,
+      'activeIcon': Icons.history
+    },
+
+    // SUPPLIER MANAGEMENT
+    {
+      'title': 'Suppliers',
+      'icon': Icons.local_shipping_outlined,
+      'activeIcon': Icons.local_shipping
+    },
+
+    // PURCHASE MANAGEMENT
+    {
+      'title': 'Purchases',
+      'icon': Icons.shopping_cart_outlined,
+      'activeIcon': Icons.shopping_cart
+    },
+
+    // ACCOUNTS & PAYMENTS
+    {
+      'title': 'Payments',
+      'icon': Icons.payments_outlined,
+      'activeIcon': Icons.payments
+    },
+    {
+      'title': 'Supplier Payment',
+      'icon': Icons.payments_outlined,
+      'activeIcon': Icons.payments
+    },
+    {
+      'title': 'Expenses',
+      'icon': Icons.account_balance_wallet_outlined,
+      'activeIcon': Icons.account_balance_wallet
+    },
+    {
+      'title': 'Supplier Ledger',
+      'icon': Icons.book_outlined,
+      'activeIcon': Icons.book
+    },
+
+    // REPORTS & ANALYTICS
+    {
+      'title': 'Reports',
+      'icon': Icons.assessment_outlined,
+      'activeIcon': Icons.assessment
+    },
+
+    // SYSTEM / SETTINGS
+    {
+      'title': 'Master Data',
+      'icon': Icons.storage_outlined,
+      'activeIcon': Icons.storage
+    },
+    {
+      'title': 'Bulk Upload',
+      'icon': Icons.upload_file_outlined,
+      'activeIcon': Icons.upload_file
+    },
+    {
+      'title': 'Company Settings',
+      'icon': Icons.settings_outlined,
+      'activeIcon': Icons.settings
+    },
   ];
 
   // Method to refresh the entire app
@@ -56,22 +145,41 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
   }
 
   List<Widget> get _screens => [
-    PremiumDashboardHomeContent(key: _refreshKey),
-    InventoryScreen(key: _refreshKey),
-    AddItemScreen(key: _refreshKey),
-    ItemsScreen(key: _refreshKey),
-    CustomerListScreen(key: _refreshKey),
-    SuppliersScreen(key: _refreshKey),
-    SaleScreenDesktop(key: _refreshKey),
-    CustomerListScreen(key: _refreshKey, forPayment: true),
-    PurchaseScreenDesktop(key: _refreshKey),
-    ExpenseEntryScreen(key: _refreshKey),
-    ReportsScreen(key: _refreshKey),
-    SaleHistoryScreen(key: _refreshKey),
-    DailyClosingScreen(key: _refreshKey),
-    MasterDataScreen(key: _refreshKey),
-    BulkImportScreen(key: _refreshKey),
-  ];
+        // Dashboard
+        PremiumDashboardHomeContent(key: _refreshKey),
+
+        // Inventory
+        InventoryScreen(key: _refreshKey),
+        AddItemScreen(key: _refreshKey),
+        ItemsScreen(key: _refreshKey),
+
+        // Customers
+        CustomerListScreen(key: _refreshKey),
+
+        // Sales
+        SaleScreenDesktop(key: _refreshKey),
+        SaleHistoryScreen(key: _refreshKey),
+
+        // Suppliers
+        SuppliersScreen(key: _refreshKey),
+
+        // Purchases
+        PurchaseScreenDesktop(key: _refreshKey),
+
+        // Accounts
+        CustomerListScreen(key: _refreshKey, forPayment: true),
+        SupplierPaymentByInvoiceScreen(key: _refreshKey),
+        ExpenseEntryScreen(key: _refreshKey),
+        SupplierLedgerReportInvoiceBased(key: _refreshKey),
+
+        // Reports
+        ReportsScreen(key: _refreshKey),
+
+        // System
+        MasterDataScreen(key: _refreshKey),
+        BulkImportScreen(key: _refreshKey),
+        CompanySettingsScreen(key: _refreshKey),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +228,8 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
                 _isSidebarExpanded ? Icons.menu_open : Icons.menu,
                 color: const Color(0xFF6B7280),
               ),
-              onPressed: () => setState(() => _isSidebarExpanded = !_isSidebarExpanded),
+              onPressed: () =>
+                  setState(() => _isSidebarExpanded = !_isSidebarExpanded),
             ),
           if (!isWideScreen)
             Builder(
@@ -139,13 +248,14 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
             ),
           ),
           const Spacer(),
-          
+
           // REFRESH BUTTON - Added here
           _buildRefreshButton(),
-          
+
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Color(0xFF6B7280)),
+            icon: const Icon(Icons.notifications_outlined,
+                color: Color(0xFF6B7280)),
             onPressed: () {},
           ),
           const SizedBox(width: 8),
@@ -304,11 +414,13 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
     );
   }
 
-  Widget _buildMenuItem(Map<String, dynamic> item, bool isSelected, bool narrow) {
+  Widget _buildMenuItem(
+      Map<String, dynamic> item, bool isSelected, bool narrow) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
-        onTap: () => setState(() => _selectedIndex = sidebarItems.indexOf(item)),
+        onTap: () =>
+            setState(() => _selectedIndex = sidebarItems.indexOf(item)),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: EdgeInsets.symmetric(
@@ -323,7 +435,9 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
               ? Center(
                   child: Icon(
                     isSelected ? item['activeIcon'] : item['icon'],
-                    color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF6B7280),
+                    color: isSelected
+                        ? const Color(0xFF2563EB)
+                        : const Color(0xFF6B7280),
                     size: 22,
                   ),
                 )
@@ -331,7 +445,9 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
                   children: [
                     Icon(
                       isSelected ? item['activeIcon'] : item['icon'],
-                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF6B7280),
+                      color: isSelected
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFF6B7280),
                       size: 20,
                     ),
                     const SizedBox(width: 12),
@@ -340,8 +456,11 @@ class _PremiumDashboardScreenState extends State<PremiumDashboardScreen> {
                         item['title'],
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                          color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF374151),
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: isSelected
+                              ? const Color(0xFF2563EB)
+                              : const Color(0xFF374151),
                         ),
                       ),
                     ),
@@ -368,10 +487,12 @@ class PremiumDashboardHomeContent extends StatefulWidget {
   const PremiumDashboardHomeContent({super.key});
 
   @override
-  State<PremiumDashboardHomeContent> createState() => _PremiumDashboardHomeContentState();
+  State<PremiumDashboardHomeContent> createState() =>
+      _PremiumDashboardHomeContentState();
 }
 
-class _PremiumDashboardHomeContentState extends State<PremiumDashboardHomeContent> {
+class _PremiumDashboardHomeContentState
+    extends State<PremiumDashboardHomeContent> {
   double todaySales = 0;
   int todayOrders = 0;
   int totalCustomers = 0;
@@ -615,7 +736,8 @@ class _PremiumDashboardHomeContentState extends State<PremiumDashboardHomeConten
                 return InkWell(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => action['screen'] as Widget),
+                    MaterialPageRoute(
+                        builder: (_) => action['screen'] as Widget),
                   ),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(

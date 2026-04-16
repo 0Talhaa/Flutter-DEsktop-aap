@@ -24,6 +24,7 @@ dependencies:
   # Utilities
   intl: ^0.19.0
   shared_preferences: ^2.5.4
+  flutter_pos_printer_platform_image_3: ^1.2.4
   file_picker: ^10.3.10
   excel: ^4.0.6
   share_plus: ^12.0.1
@@ -33,8 +34,12 @@ dependencies:
   bluetooth_print: ^4.3.0
   esc_pos_utils_plus: ^2.0.4
   printing: ^5.14.2
+  print_bluetooth_thermal: ^1.1.1
+  flutter_usb_printer: ^0.1.0+1   # ✅ FIXED
   pdf: ^3.12.0
   path_provider: ^2.1.5
+  open_filex: ^4.7.0
+  image: ^4.0.17
 
 dev_dependencies:
   flutter_test:

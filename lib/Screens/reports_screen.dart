@@ -88,14 +88,14 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       color: const Color(0xFF06B6D4),
       category: 'inventory',
     ),
-    ReportItem(
-      id: 'inventory_ledger',
-      name: 'Inventory Ledger',
-      description: 'Item-wise stock movements',
-      icon: Icons.receipt_long_outlined,
-      color: const Color(0xFF84CC16),
-      category: 'inventory',
-    ),
+    // ReportItem(
+    //   id: 'inventory_ledger',
+    //   name: 'Inventory Ledger',
+    //   description: 'Item-wise stock movements',
+    //   icon: Icons.receipt_long_outlined,
+    //   color: const Color(0xFF84CC16),
+    //   category: 'inventory',
+    // ),
     ReportItem(
       id: 'item_wise_sale',
       name: 'Item Wise Sales',
@@ -104,14 +104,14 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       color: const Color(0xFFEC4899),
       category: 'sales',
     ),
-    ReportItem(
-      id: 'customer_wise_sale',
-      name: 'Customer Wise Sales',
-      description: 'Customer sales contribution',
-      icon: Icons.person_outline,
-      color: const Color(0xFF14B8A6),
-      category: 'sales',
-    ),
+    // ReportItem(
+    //   id: 'customer_wise_sale',
+    //   name: 'Customer Wise Sales',
+    //   description: 'Customer sales contribution',
+    //   icon: Icons.person_outline,
+    //   color: const Color(0xFF14B8A6),
+    //   category: 'sales',
+    // ),
     ReportItem(
       id: 'expiry_report',
       name: 'Expiry Report',
@@ -189,12 +189,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         return const ProfitLossReport();
       case 'stock_report':
         return const StockReport();
-      case 'inventory_ledger':
-        return const InventoryLedgerReport();
+      // case 'inventory_ledger':
+      //   return const InventoryLedgerReport();
       case 'item_wise_sale':
         return const ItemWiseSaleReport();
-      case 'customer_wise_sale':
-        return const CustomerWiseSaleReport();
+      // case 'customer_wise_sale':
+      //   return const CustomerWiseSaleReport();
       default:
         return _buildComingSoonWidget();
     }

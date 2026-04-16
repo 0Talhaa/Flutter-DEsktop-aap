@@ -18,24 +18,27 @@ class PurchaseScreenDesktop extends StatefulWidget {
 }
 
 class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
-  // Controllers
+  // ── Controllers ────────────────────────────────────────────────────────────
   final TextEditingController invoiceController = TextEditingController();
   final TextEditingController dateController = TextEditingController();
   final TextEditingController supplierNameController = TextEditingController();
-  final TextEditingController supplierBalanceController = TextEditingController();
+  final TextEditingController supplierBalanceController =
+      TextEditingController();
   final TextEditingController searchController = TextEditingController();
   final TextEditingController amountPaidController = TextEditingController();
 
-  // Focus nodes
+  // ── Focus nodes ────────────────────────────────────────────────────────────
   final FocusNode searchFocusNode = FocusNode();
   final FocusNode _mainFocusNode = FocusNode();
+
+  // ── Search navigation ──────────────────────────────────────────────────────
   int selectedSearchIndex = -1;
 
-  // Cart navigation
+  // ── Cart navigation ────────────────────────────────────────────────────────
   int selectedCartIndex = -1;
   bool isNavigatingCart = false;
 
-  // Per-item controllers & focus nodes
+  // ── Per-item controllers & focus nodes ────────────────────────────────────
   final Map<int, TextEditingController> qtyControllers = {};
   final Map<int, FocusNode> qtyFocusNodes = {};
   final Map<int, TextEditingController> disControllers = {};
@@ -44,7 +47,6 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   final Map<int, String> selectedUnits = {};
   final Map<int, Product> cartProductData = {};
 
-  // Per-item T.P and R.P controllers
   final Map<int, TextEditingController> tpControllers = {};
   final Map<int, FocusNode> tpFocusNodes = {};
   final Map<int, TextEditingController> rpControllers = {};
@@ -53,7 +55,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   bool _isSubmittingQty = false;
   bool _isSubmittingDis = false;
 
-  // Data
+  // ── Data ───────────────────────────────────────────────────────────────────
   List<Product> allProducts = [];
   List<PurchaseItem> cart = [];
   List<Supplier> allSuppliers = [];
@@ -69,6 +71,10 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     decimalDigits: 0,
   );
 
+  // ============================================================
+  // LIFECYCLE
+  // ============================================================
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +87,50 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       searchFocusNode.requestFocus();
     });
   }
+
+  @override
+  void dispose() {
+    invoiceController.dispose();
+    dateController.dispose();
+    supplierNameController.dispose();
+    supplierBalanceController.dispose();
+    searchController.dispose();
+    amountPaidController.dispose();
+    searchFocusNode.dispose();
+    _mainFocusNode.dispose();
+    for (var c in qtyControllers.values) {
+      c.dispose();
+    }
+    for (var n in qtyFocusNodes.values) {
+      n.dispose();
+    }
+    for (var c in disControllers.values) {
+      c.dispose();
+    }
+    for (var n in disFocusNodes.values) {
+      n.dispose();
+    }
+    for (var n in unitFocusNodes.values) {
+      n.dispose();
+    }
+    for (var c in tpControllers.values) {
+      c.dispose();
+    }
+    for (var n in tpFocusNodes.values) {
+      n.dispose();
+    }
+    for (var c in rpControllers.values) {
+      c.dispose();
+    }
+    for (var n in rpFocusNodes.values) {
+      n.dispose();
+    }
+    super.dispose();
+  }
+
+  // ============================================================
+  // INIT HELPERS
+  // ============================================================
 
   void _generateInvoiceNumber() {
     final now = DateTime.now();
@@ -101,36 +151,40 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     setState(() => allProducts = products);
   }
 
+  // ============================================================
+  // TOTALS
+  // ============================================================
+
   double get totalQuantity =>
       cart.fold(0, (sum, item) => sum + item.quantity).toDouble();
-  
-  // ── UPDATED: Calculate total with percentage discount ──
-  double get totalAmount => cart.fold(0.0, (sum, item) {
-    double subtotal = item.tradePrice * item.quantity;
-    double discountAmount = subtotal * ((item.discount ?? 0) / 100);
-    return sum + (subtotal - discountAmount);
-  });
-  
-  // ── NEW: Total discount amount ──
-  double get totalDiscountAmount => cart.fold(0.0, (sum, item) {
-    double subtotal = item.tradePrice * item.quantity;
-    return sum + (subtotal * ((item.discount ?? 0) / 100));
-  });
-  
-  // ── NEW: Subtotal before discount ──
-  double get subtotalBeforeDiscount => cart.fold(0.0, (sum, item) {
-    return sum + (item.tradePrice * item.quantity);
-  });
 
-  double get amountPaid =>
-      double.tryParse(amountPaidController.text) ?? 0.0;
+  double get totalAmount => cart.fold(0.0, (sum, item) {
+        double subtotal = item.tradePrice * item.quantity;
+        double discountAmount = subtotal * ((item.discount ?? 0) / 100);
+        return sum + (subtotal - discountAmount);
+      });
+
+  double get totalDiscountAmount => cart.fold(0.0, (sum, item) {
+        double subtotal = item.tradePrice * item.quantity;
+        return sum + (subtotal * ((item.discount ?? 0) / 100));
+      });
+
+  double get subtotalBeforeDiscount => cart.fold(0.0, (sum, item) {
+        return sum + (item.tradePrice * item.quantity);
+      });
+
+  double get amountPaid => double.tryParse(amountPaidController.text) ?? 0.0;
+
   double get balance {
     double previousBalance =
         double.tryParse(supplierBalanceController.text) ?? 0.0;
     return previousBalance + totalAmount - amountPaid;
   }
 
-  // ==================== FOCUS NODE CREATION ====================
+  // ============================================================
+  // FOCUS NODE FACTORY METHODS
+  // ============================================================
+
   FocusNode _createQtyFocusNode(int productId) {
     final node = FocusNode();
     node.addListener(() {
@@ -151,8 +205,6 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     return node;
   }
 
-  FocusNode _createUnitFocusNode(int productId) => FocusNode();
-
   FocusNode _createTpFocusNode(int productId) {
     final node = FocusNode();
     node.addListener(() {
@@ -169,7 +221,38 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     return node;
   }
 
-  // ==================== COMMIT VALUES ====================
+  // ============================================================
+  // INITIALIZE CONTROLLERS FOR A NEW CART ITEM
+  // ============================================================
+
+  /// Creates all controllers and focus nodes for [productId] if they don't
+  /// exist yet. Returns immediately if they are already present.
+  void _initControllersForProduct(int productId, PurchaseItem item) {
+    if (qtyControllers.containsKey(productId)) return;
+
+    qtyControllers[productId] =
+        TextEditingController(text: item.quantity.toString());
+    qtyFocusNodes[productId] = _createQtyFocusNode(productId);
+
+    tpControllers[productId] =
+        TextEditingController(text: item.tradePrice.toStringAsFixed(0));
+    tpFocusNodes[productId] = _createTpFocusNode(productId);
+
+    rpControllers[productId] =
+        TextEditingController(text: (item.retailPrice ?? 0).toStringAsFixed(0));
+    rpFocusNodes[productId] = _createRpFocusNode(productId);
+
+    disControllers[productId] =
+        TextEditingController(text: (item.discount ?? 0).toStringAsFixed(0));
+    disFocusNodes[productId] = _createDisFocusNode(productId);
+
+    unitFocusNodes[productId] = FocusNode();
+  }
+
+  // ============================================================
+  // COMMIT VALUES
+  // ============================================================
+
   void _commitQtyValue(int productId) {
     final controller = qtyControllers[productId];
     if (controller == null) return;
@@ -193,19 +276,14 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     });
   }
 
-  // ── UPDATED: Validate discount percentage (0-100) ──
   void _commitDisValue(int productId) {
     final controller = disControllers[productId];
     if (controller == null) return;
     double numValue = double.tryParse(controller.text) ?? 0;
-    
-    // Clamp discount between 0 and 100
     if (numValue < 0) numValue = 0;
     if (numValue > 100) numValue = 100;
-    
-    // Update controller if value was clamped
-    controller.text = numValue.toStringAsFixed(numValue.truncateToDouble() == numValue ? 0 : 2);
-    
+    controller.text = numValue
+        .toStringAsFixed(numValue.truncateToDouble() == numValue ? 0 : 2);
     final index = cart.indexWhere((e) => e.productId == productId);
     if (index == -1) return;
     final item = cart[index];
@@ -237,7 +315,10 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     });
   }
 
-  // ==================== REMOVE ITEM ====================
+  // ============================================================
+  // REMOVE ITEM
+  // ============================================================
+
   void _removeCartItem(int productId) {
     qtyControllers[productId]?.dispose();
     qtyControllers.remove(productId);
@@ -262,112 +343,57 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     cart.removeWhere((item) => item.productId == productId);
   }
 
-  // ==================== KEYBOARD HANDLER ====================
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+  // ============================================================
+  // FOCUS HELPERS
+  // ============================================================
 
-    final filtered = allProducts
-        .where((p) =>
-            p.itemName.toLowerCase().contains(searchQuery.toLowerCase()))
-        .toList();
-
-    if (event.logicalKey == LogicalKeyboardKey.f1) {
-      _focusOnUnitSelector();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.f2) {
-      if (selectedCartIndex >= 0 && selectedCartIndex < cart.length) {
-        _focusCartItemQty(selectedCartIndex);
-      } else if (cart.isNotEmpty) {
-        setState(() { selectedCartIndex = 0; isNavigatingCart = true; });
-        _focusCartItemQty(0);
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.f3) {
-      if (selectedCartIndex >= 0 && selectedCartIndex < cart.length) {
-        _focusCartItemDis(selectedCartIndex);
-      } else if (cart.isNotEmpty) {
-        setState(() { selectedCartIndex = 0; isNavigatingCart = true; });
-        _focusCartItemDis(0);
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (searchQuery.isNotEmpty && filtered.isNotEmpty) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        setState(() {
-          selectedSearchIndex = (selectedSearchIndex + 1) % filtered.length;
-          isNavigatingCart = false;
-        });
-        return KeyEventResult.handled;
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        setState(() {
-          selectedSearchIndex =
-              (selectedSearchIndex - 1 + filtered.length) % filtered.length;
-          isNavigatingCart = false;
-        });
-        return KeyEventResult.handled;
-      } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-        if (selectedSearchIndex >= 0 &&
-            selectedSearchIndex < filtered.length) {
-          _addToCartAndFocusQty(filtered[selectedSearchIndex]);
-        }
-        return KeyEventResult.handled;
-      }
-    } else if (searchQuery.isEmpty && cart.isNotEmpty) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        setState(() {
-          isNavigatingCart = true;
-          selectedCartIndex = (selectedCartIndex + 1) % cart.length;
-        });
-        _focusCartItemQty(selectedCartIndex);
-        return KeyEventResult.handled;
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        setState(() {
-          isNavigatingCart = true;
-          selectedCartIndex =
-              (selectedCartIndex - 1 + cart.length) % cart.length;
-        });
-        _focusCartItemQty(selectedCartIndex);
-        return KeyEventResult.handled;
-      } else if (event.logicalKey == LogicalKeyboardKey.enter &&
-          isNavigatingCart) {
-        if (selectedCartIndex >= 0) _focusCartItemQty(selectedCartIndex);
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      _returnFocusToSearch();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
+  void _focusField(FocusNode? node, TextEditingController? ctrl) {
+    if (node == null || ctrl == null) return;
+    node.requestFocus();
+    ctrl.selection =
+        TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
   }
 
   void _focusCartItemQty(int index) {
     if (index < 0 || index >= cart.length) return;
     final item = cart[index];
-    final focusNode = qtyFocusNodes[item.productId];
-    final controller = qtyControllers[item.productId];
-    if (focusNode != null && controller != null) {
-      focusNode.requestFocus();
-      controller.selection =
-          TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-    }
+    _focusField(qtyFocusNodes[item.productId], qtyControllers[item.productId]);
+  }
+
+  void _focusCartItemTp(int index) {
+    if (index < 0 || index >= cart.length) return;
+    final item = cart[index];
+    _focusField(tpFocusNodes[item.productId], tpControllers[item.productId]);
+  }
+
+  void _focusCartItemRp(int index) {
+    if (index < 0 || index >= cart.length) return;
+    final item = cart[index];
+    _focusField(rpFocusNodes[item.productId], rpControllers[item.productId]);
   }
 
   void _focusCartItemDis(int index) {
     if (index < 0 || index >= cart.length) return;
     final item = cart[index];
-    final focusNode = disFocusNodes[item.productId];
-    final controller = disControllers[item.productId];
-    if (focusNode != null && controller != null) {
-      focusNode.requestFocus();
-      controller.selection =
-          TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-    }
+    _focusField(disFocusNodes[item.productId], disControllers[item.productId]);
   }
+
+  void _returnFocusToSearch() {
+    searchController.clear();
+    setState(() {
+      searchQuery = '';
+      selectedSearchIndex = -1;
+      selectedCartIndex = -1;
+      isNavigatingCart = false;
+    });
+    Future.microtask(() {
+      if (mounted) searchFocusNode.requestFocus();
+    });
+  }
+
+  // ============================================================
+  // UNIT SELECTOR
+  // ============================================================
 
   void _focusOnUnitSelector() {
     if (cart.isEmpty) {
@@ -397,10 +423,243 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     _showUnitSelectionDialog(item.productId, product);
   }
 
-  // ==================== DYNAMIC UNIT OPTIONS ====================
+  // ============================================================
+  // KEYBOARD HANDLER (search panel Focus widget)
+  // ============================================================
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final filtered = allProducts
+        .where(
+            (p) => p.itemName.toLowerCase().contains(searchQuery.toLowerCase()))
+        .toList();
+
+    // ── F-key shortcuts ──────────────────────────────────────────────────────
+    if (event.logicalKey == LogicalKeyboardKey.f1) {
+      _focusOnUnitSelector();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.f2) {
+      if (selectedCartIndex >= 0 && selectedCartIndex < cart.length) {
+        _focusCartItemQty(selectedCartIndex);
+      } else if (cart.isNotEmpty) {
+        setState(() {
+          selectedCartIndex = 0;
+          isNavigatingCart = true;
+        });
+        _focusCartItemQty(0);
+      }
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.f3) {
+      if (selectedCartIndex >= 0 && selectedCartIndex < cart.length) {
+        _focusCartItemDis(selectedCartIndex);
+      } else if (cart.isNotEmpty) {
+        setState(() {
+          selectedCartIndex = 0;
+          isNavigatingCart = true;
+        });
+        _focusCartItemDis(0);
+      }
+      return KeyEventResult.handled;
+    }
+
+    // ── Search list navigation ───────────────────────────────────────────────
+    if (searchQuery.isNotEmpty && filtered.isNotEmpty) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        setState(() {
+          selectedSearchIndex = (selectedSearchIndex + 1) % filtered.length;
+          isNavigatingCart = false;
+        });
+        return KeyEventResult.handled;
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        setState(() {
+          selectedSearchIndex =
+              (selectedSearchIndex - 1 + filtered.length) % filtered.length;
+          isNavigatingCart = false;
+        });
+        return KeyEventResult.handled;
+      } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+        if (selectedSearchIndex >= 0 && selectedSearchIndex < filtered.length) {
+          _addToCartAndFocusQty(filtered[selectedSearchIndex]);
+        }
+        return KeyEventResult.handled;
+      }
+    }
+    // ── Cart navigation when search is empty ─────────────────────────────────
+    else if (searchQuery.isEmpty && cart.isNotEmpty) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        setState(() {
+          isNavigatingCart = true;
+          selectedCartIndex = (selectedCartIndex + 1) % cart.length;
+        });
+        _focusCartItemQty(selectedCartIndex);
+        return KeyEventResult.handled;
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        setState(() {
+          isNavigatingCart = true;
+          selectedCartIndex =
+              (selectedCartIndex - 1 + cart.length) % cart.length;
+        });
+        _focusCartItemQty(selectedCartIndex);
+        return KeyEventResult.handled;
+      } else if (event.logicalKey == LogicalKeyboardKey.enter &&
+          isNavigatingCart) {
+        if (selectedCartIndex >= 0) _focusCartItemQty(selectedCartIndex);
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _returnFocusToSearch();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // ============================================================
+  // GLOBAL SHORTCUT HANDLER  (Ctrl+S / Ctrl+F / Ctrl+A / Ctrl+P)
+  // ============================================================
+
+  KeyEventResult _handleGlobalShortcut(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final isCtrl = HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+
+    if (isCtrl) {
+      if (event.logicalKey == LogicalKeyboardKey.keyS) {
+        // Ctrl+S → Save
+        if (!(_isPurchaseCompleted && !_isEditMode)) {
+          _savePurchase(updateExisting: _isPurchaseCompleted && _isEditMode);
+        }
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.keyF) {
+        // Ctrl+F → Find
+        _showFindDialog();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.keyA) {
+        // Ctrl+A → Add / Save & New
+        if (cart.isNotEmpty) _performSaveAndNew();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.keyP) {
+        // Ctrl+P → Print (stub)
+        if (cart.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('🖨️ Print feature coming soon!'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ));
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Escape from anywhere → back to search
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _returnFocusToSearch();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // ============================================================
+  // ADD TO CART  (★ fixed: init controllers THEN focus qty)
+  // ============================================================
+
+  void _addToCartAndFocusQty(Product p) {
+    if (_isPurchaseCompleted && !_isEditMode) return;
+    final targetProductId = p.id!;
+
+    setState(() {
+      final existIndex = cart.indexWhere((e) => e.productId == targetProductId);
+
+      if (existIndex != -1) {
+        // ── Item already in cart → increment qty ──────────────────────────
+        final item = cart[existIndex];
+        final newQty = item.quantity + 1;
+        final selectedUnit = selectedUnits[targetProductId] ??
+            item.unitType ??
+            p.baseUnit ??
+            p.issueUnit ??
+            'Pc';
+        final newBaseQty = p.hasUnitConversion
+            ? p.convertToBaseUnits(newQty, selectedUnit)
+            : newQty;
+
+        cart[existIndex] = item.copyWith(
+          quantity: newQty,
+          unitType: selectedUnit,
+          baseQuantity: newBaseQty,
+        );
+        // Update the qty controller text so the field shows the new value
+        qtyControllers[targetProductId]?.text = newQty.toString();
+
+        // Update selectedCartIndex so F2/F3 work on the right row
+        selectedCartIndex = existIndex;
+        isNavigatingCart = true;
+      } else {
+        // ── New item → add to cart ────────────────────────────────────────
+        final defaultUnit = p.hasUnitConversion
+            ? (p.baseUnit ?? 'Tablet')
+            : (p.issueUnit ?? 'Pc');
+        final defaultPrice = p.hasUnitConversion
+            ? (p.pricePerUnit ?? p.tradePrice)
+            : p.tradePrice;
+        final defaultRetailPrice = p.retailPrice ?? 0.0;
+        final initialBaseQty =
+            p.hasUnitConversion ? p.convertToBaseUnits(1, defaultUnit) : 1;
+
+        final newItem = PurchaseItem(
+          productId: targetProductId,
+          productName: p.itemName,
+          tradePrice: defaultPrice,
+          retailPrice: defaultRetailPrice,
+          quantity: 1,
+          packing: p.issueUnit,
+          discount: 0,
+          salesTax: 0,
+          unitType: defaultUnit,
+          baseQuantity: initialBaseQty,
+        );
+
+        cart.add(newItem);
+        cartProductData[targetProductId] = p;
+        selectedUnits[targetProductId] = defaultUnit;
+
+        // ★ CRITICAL: init controllers BEFORE we try to focus them
+        _initControllersForProduct(targetProductId, newItem);
+
+        selectedCartIndex = cart.length - 1;
+        isNavigatingCart = true;
+      }
+    });
+
+    // Clear search so the panel is clean
+    searchController.clear();
+    searchQuery = '';
+    selectedSearchIndex = -1;
+
+    // ★ Focus qty field AFTER the frame has built the new row
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final index = cart.indexWhere((e) => e.productId == targetProductId);
+      if (index != -1) _focusCartItemQty(index);
+    });
+  }
+
+  // ============================================================
+  // UNIT OPTIONS
+  // ============================================================
+
   List<_UnitOption> _getUnitOptions(Product product) {
     final options = <_UnitOption>[];
-
     options.add(_UnitOption(
       unitKey: product.baseUnit ?? 'Tablet',
       displayName: product.baseUnit ?? 'Tablet',
@@ -409,7 +668,8 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       tierIndex: 0,
     ));
 
-    if (product.conversionTiers != null && product.conversionTiers!.isNotEmpty) {
+    if (product.conversionTiers != null &&
+        product.conversionTiers!.isNotEmpty) {
       for (int i = 0; i < product.conversionTiers!.length; i++) {
         final tier = product.conversionTiers![i];
         options.add(_UnitOption(
@@ -443,14 +703,11 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
         ));
       }
     }
-
     return options;
   }
 
-  // ==================== DYNAMIC UNIT SELECTION DIALOG ====================
   void _showUnitSelectionDialog(int productId, Product product) {
-    final currentUnit =
-        selectedUnits[productId] ?? product.baseUnit ?? 'Unit';
+    final currentUnit = selectedUnits[productId] ?? product.baseUnit ?? 'Unit';
     final unitOptions = _getUnitOptions(product);
 
     const tierColors = [
@@ -465,243 +722,210 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
 
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          titlePadding: EdgeInsets.zero,
-          title: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF10B981), Color(0xFF3B82F6)],
-              ),
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.swap_horiz, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Select Purchase Unit',
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            gradient:
+                LinearGradient(colors: [Color(0xFF10B981), Color(0xFF3B82F6)]),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.swap_horiz, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select Purchase Unit',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        product.itemName,
+                            fontWeight: FontWeight.w700)),
+                    Text(product.itemName,
                         style: const TextStyle(
                             color: Colors.white70, fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+                        overflow: TextOverflow.ellipsis),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${unitOptions.length} Tiers',
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('${unitOptions.length} Tiers',
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
-                        fontWeight: FontWeight.w600),
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (unitOptions.length > 1)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: const Color(0xFFFBBF24).withOpacity(0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.calculate_outlined,
+                            size: 14, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 6),
+                      ]),
+                      const SizedBox(height: 6),
+                      ...List.generate(unitOptions.length - 1, (i) {
+                        final upper = unitOptions[i + 1];
+                        return Text(
+                          '• 1 ${upper.displayName} = ${upper.containsLabel}',
+                          style: const TextStyle(
+                              fontSize: 11, color: Color(0xFF92400E)),
+                        );
+                      }),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (unitOptions.length > 1)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    margin: const EdgeInsets.only(bottom: 12),
+              ...unitOptions.asMap().entries.map((entry) {
+                final i = entry.key;
+                final opt = entry.value;
+                final isSelected = currentUnit == opt.unitKey;
+                final color = colorFor(i);
+
+                return GestureDetector(
+                  onTap: () {
+                    _updateUnitSelection(
+                        productId, opt.unitKey, product, opt.price);
+                    Navigator.pop(context);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(8),
+                      color: isSelected
+                          ? color.withOpacity(0.08)
+                          : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: const Color(0xFFFBBF24).withOpacity(0.4)),
+                        color: isSelected ? color : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                  color: color.withOpacity(0.15),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2))
+                            ]
+                          : [],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(children: [
-                          const Icon(Icons.calculate_outlined,
-                              size: 14, color: Color(0xFFF59E0B)),
-                          const SizedBox(width: 6),
-                        ]),
-                        const SizedBox(height: 6),
-                        ...List.generate(unitOptions.length - 1, (i) {
-                          final upper = unitOptions[i + 1];
-                          return Text(
-                            '• 1 ${upper.displayName} = ${upper.containsLabel}',
-                            style: const TextStyle(
-                                fontSize: 11, color: Color(0xFF92400E)),
-                          );
-                        }),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isSelected ? color : color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              i == 0 ? 'B' : '$i',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: isSelected ? Colors.white : color,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Text(opt.displayName,
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected
+                                            ? color
+                                            : const Color(0xFF1E293B))),
+                                if (i == 0) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text('BASE',
+                                        style: TextStyle(
+                                            fontSize: 8,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ]),
+                              Text(opt.containsLabel,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600)),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(currencyFormat.format(opt.price),
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? color
+                                        : const Color(0xFF10B981))),
+                            Text('T.P',
+                                style: TextStyle(
+                                    fontSize: 9, color: Colors.grey.shade500)),
+                            if (isSelected)
+                              Icon(Icons.check_circle, color: color, size: 16),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-
-                ...unitOptions.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final opt = entry.value;
-                  final isSelected = currentUnit == opt.unitKey;
-                  final color = colorFor(i);
-
-                  return GestureDetector(
-                    onTap: () {
-                      _updateUnitSelection(
-                          productId, opt.unitKey, product, opt.price);
-                      Navigator.pop(context);
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? color.withOpacity(0.08)
-                            : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? color
-                              : Colors.grey.shade300,
-                          width: isSelected ? 2 : 1,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                    color: color.withOpacity(0.15),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2))
-                              ]
-                            : [],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? color
-                                  : color.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                i == 0 ? 'B' : '$i',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : color,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  Text(
-                                    opt.displayName,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: isSelected
-                                          ? color
-                                          : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                  if (i == 0) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: color,
-                                        borderRadius:
-                                            BorderRadius.circular(4),
-                                      ),
-                                      child: const Text('BASE',
-                                          style: TextStyle(
-                                              fontSize: 8,
-                                              color: Colors.white,
-                                              fontWeight:
-                                                  FontWeight.bold)),
-                                    ),
-                                  ],
-                                ]),
-                                Text(
-                                  opt.containsLabel,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                currencyFormat.format(opt.price),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? color
-                                      : const Color(0xFF10B981),
-                                ),
-                              ),
-                              Text(
-                                'T.P',
-                                style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.grey.shade500),
-                              ),
-                              if (isSelected)
-                                Icon(Icons.check_circle,
-                                    color: color, size: 16),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
+                );
+              }),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
     ).then((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) searchFocusNode.requestFocus();
@@ -713,11 +937,10 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       int productId, String newUnit, Product product, double newPrice) {
     final index = cart.indexWhere((e) => e.productId == productId);
     if (index == -1) return;
-
     final item = cart[index];
     final qty = item.quantity;
-    int baseQty = product.convertToBaseUnits(qty, newUnit);
-    double tradePrice = product.getTradePriceByUnit(newUnit);
+    final baseQty = product.convertToBaseUnits(qty, newUnit);
+    final tradePrice = product.getTradePriceByUnit(newUnit);
 
     setState(() {
       selectedUnits[productId] = newUnit;
@@ -737,16 +960,16 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     ));
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
+    return Focus(
       focusNode: _mainFocusNode,
-      onKeyEvent: (event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.f1) {
-          _focusOnUnitSelector();
-        }
-      },
+      autofocus: true,
+      onKeyEvent: _handleGlobalShortcut, // ← Ctrl+S/F/A/P caught here
       child: Scaffold(
         backgroundColor: const Color(0xFFE8E8E8),
         body: LayoutBuilder(
@@ -761,6 +984,10 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       ),
     );
   }
+
+  // ============================================================
+  // LAYOUT
+  // ============================================================
 
   Widget _buildDesktopLayout() {
     return Padding(
@@ -805,34 +1032,9 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
-  Widget _buildShortcutChip(String key, String action, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: BoxDecoration(
-                color: color, borderRadius: BorderRadius.circular(3)),
-            child: Text(key,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 3),
-          Text(action,
-              style: TextStyle(fontSize: 9, color: Colors.grey.shade700)),
-        ],
-      ),
-    );
-  }
+  // ============================================================
+  // INVOICE + SUPPLIER
+  // ============================================================
 
   Widget _buildInvoiceAndSupplierSection() {
     return Column(
@@ -841,18 +1043,16 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           children: [
             Expanded(
               child: _buildLabeledTextField(
-                label: 'Invoice Number',
-                controller: invoiceController,
-                readOnly: false,
-              ),
+                  label: 'Invoice Number',
+                  controller: invoiceController,
+                  readOnly: false),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: _buildLabeledTextField(
-                label: 'Purchase Date',
-                controller: dateController,
-                readOnly: true,
-              ),
+                  label: 'Purchase Date',
+                  controller: dateController,
+                  readOnly: true),
             ),
           ],
         ),
@@ -875,8 +1075,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Supplier Name *',
-                      style: TextStyle(fontSize: 13)),
+                  const Text('Supplier Name *', style: TextStyle(fontSize: 13)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<Supplier>(
                     value: selectedSupplier,
@@ -913,10 +1112,9 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
             const SizedBox(width: 24),
             Expanded(
               child: _buildLabeledTextField(
-                label: 'Current Balance',
-                controller: supplierBalanceController,
-                readOnly: true,
-              ),
+                  label: 'Current Balance',
+                  controller: supplierBalanceController,
+                  readOnly: true),
             ),
           ],
         ),
@@ -933,8 +1131,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w500)),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
@@ -956,6 +1153,10 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
+  // ============================================================
+  // ITEMS TABLE
+  // ============================================================
+
   Widget _buildItemsTable() {
     return Container(
       decoration: BoxDecoration(
@@ -965,15 +1166,13 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       ),
       child: Column(
         children: [
-          // ── Header row ─────────────────────────────────────────────────────
+          // Header
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFFD3D3D3),
-              border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade400)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade400)),
             ),
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Row(
               children: [
                 _buildHeaderCell('S#', flex: 1),
@@ -982,34 +1181,18 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                 _buildHeaderCell('QTY (F2)', flex: 1),
                 _buildHeaderCell('T.P', flex: 2),
                 _buildHeaderCell('R.P', flex: 2),
-                // ── UPDATED: Changed header to show percentage ──
                 _buildHeaderCell('DIS % (F3)', flex: 1),
                 _buildHeaderCell('Amount', flex: 2),
                 _buildHeaderCell('', flex: 1),
               ],
             ),
           ),
-          // ── Body ───────────────────────────────────────────────────────────
+          // Body
           Expanded(
             child: cart.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.shopping_cart_outlined,
-                            size: 25,color: Colors.grey.shade400),
-                        // const SizedBox(height: 8),
-                        // const Text('No items added',
-                        //     style: TextStyle(color: Colors.grey)),
-                        // const SizedBox(height: 4),
-                        // Text(
-                        //   'Search → QTY → T.P → R.P → DIS% → Search',
-                        //   style: TextStyle(
-                        //       fontSize: 11,
-                        //       color: Colors.grey.shade500),
-                        // ),
-                      ],
-                    ),
+                    child: Icon(Icons.shopping_cart_outlined,
+                        size: 25, color: Colors.grey.shade400),
                   )
                 : ListView.builder(
                     itemCount: cart.length,
@@ -1028,11 +1211,9 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                                   : Colors.grey.shade50),
                           border: Border(
                             bottom: BorderSide(
-                                color: Colors.grey.shade300,
-                                width: 0.5),
+                                color: Colors.grey.shade300, width: 0.5),
                             left: isSelected
-                                ? const BorderSide(
-                                    color: Colors.blue, width: 3)
+                                ? const BorderSide(color: Colors.blue, width: 3)
                                 : BorderSide.none,
                           ),
                         ),
@@ -1047,9 +1228,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                             _buildEditableQtyCell(item, index: index),
                             _buildEditableTpCell(item, index: index),
                             _buildEditableRpCell(item, index: index),
-                            // ── UPDATED: Percentage discount cell ──
                             _buildEditableDisCell(item, index: index),
-                            // ── UPDATED: Show calculated amount with discount ──
                             _buildAmountCell(item, flex: 2),
                             _buildDeleteCell(item, flex: 1),
                           ],
@@ -1068,8 +1247,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       flex: flex,
       child: Text(text,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w600)),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -1084,13 +1262,12 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
-  // ── NEW: Amount cell that shows subtotal, discount, and final amount ──
   Widget _buildAmountCell(PurchaseItem item, {int flex = 2}) {
     final subtotal = item.tradePrice * item.quantity;
     final discountPercent = item.discount ?? 0;
     final discountAmount = subtotal * (discountPercent / 100);
     final finalAmount = subtotal - discountAmount;
-    
+
     return Expanded(
       flex: flex,
       child: Column(
@@ -1099,19 +1276,17 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           Text(
             currencyFormat.format(finalAmount),
             style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87),
           ),
           if (discountPercent > 0)
             Text(
               '-${currencyFormat.format(discountAmount)}',
               style: TextStyle(
-                fontSize: 9,
-                color: Colors.red.shade600,
-                fontWeight: FontWeight.w500,
-              ),
+                  fontSize: 9,
+                  color: Colors.red.shade600,
+                  fontWeight: FontWeight.w500),
             ),
         ],
       ),
@@ -1121,8 +1296,8 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   Widget _buildProductNameCell(PurchaseItem item, Product? product,
       {int flex = 3}) {
     final hasConversion = product?.hasUnitConversion ?? false;
-    final tierCount = product?.conversionTiers?.length ??
-        (hasConversion ? 2 : 0);
+    final tierCount =
+        product?.conversionTiers?.length ?? (hasConversion ? 2 : 0);
 
     return Expanded(
       flex: flex,
@@ -1136,21 +1311,17 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           if (hasConversion)
             Container(
               margin: const EdgeInsets.only(left: 4),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 5, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF10B981), Color(0xFF3B82F6)],
-                ),
+                    colors: [Color(0xFF10B981), Color(0xFF3B82F6)]),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
-                '${tierCount + 1}T',
-                style: const TextStyle(
-                    fontSize: 9,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold),
-              ),
+              child: Text('${tierCount + 1}T',
+                  style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -1164,14 +1335,13 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
         item.unitType ??
         product?.baseUnit ??
         'Pc';
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
 
     if (!hasConversion) {
       return Expanded(
         flex: flex,
         child: Text(item.packing ?? 'Pc',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12)),
+            textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
       );
     }
 
@@ -1188,8 +1358,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                 _showUnitSelectionDialog(item.productId, product!);
               },
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             gradient: isReadOnly
                 ? null
@@ -1201,22 +1370,16 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
             color: isReadOnly ? Colors.grey.shade200 : null,
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-                color: isReadOnly
-                    ? Colors.grey.shade400
-                    : Colors.transparent),
+                color: isReadOnly ? Colors.grey.shade400 : Colors.transparent),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                currentUnit,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      isReadOnly ? Colors.grey.shade600 : Colors.white,
-                ),
-              ),
+              Text(currentUnit,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isReadOnly ? Colors.grey.shade600 : Colors.white)),
               if (!isReadOnly) ...[
                 const SizedBox(width: 4),
                 const Icon(Icons.arrow_drop_down,
@@ -1230,19 +1393,16 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   }
 
   Widget _buildDeleteCell(PurchaseItem item, {int flex = 1}) {
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
     return Expanded(
       flex: flex,
       child: Center(
         child: IconButton(
           onPressed: isReadOnly
               ? null
-              : () {
-                  setState(() => _removeCartItem(item.productId));
-                },
+              : () => setState(() => _removeCartItem(item.productId)),
           icon: Icon(Icons.delete_outline,
-              size: 18,
-              color: isReadOnly ? Colors.grey : Colors.red.shade400),
+              size: 18, color: isReadOnly ? Colors.grey : Colors.red.shade400),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
         ),
@@ -1250,15 +1410,15 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
-  Widget _buildEditableQtyCell(PurchaseItem item,
-      {required int index}) {
+  // ── QTY cell  (Enter → focus T.P) ─────────────────────────────────────────
+  Widget _buildEditableQtyCell(PurchaseItem item, {required int index}) {
     final itemId = item.productId;
     final controller = qtyControllers[itemId];
     final focusNode = qtyFocusNodes[itemId];
     if (controller == null || focusNode == null) {
       return _buildDataCell(item.quantity.toString(), flex: 1);
     }
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
 
     return Expanded(
       flex: 1,
@@ -1275,10 +1435,8 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           contentPadding:
               const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           filled: true,
-          fillColor:
-              isReadOnly ? const Color(0xFFE0E0E0) : Colors.blue.shade50,
-          border:
-              OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          fillColor: isReadOnly ? const Color(0xFFE0E0E0) : Colors.blue.shade50,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
             borderSide: const BorderSide(color: Colors.blue, width: 2),
@@ -1288,16 +1446,14 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           _isSubmittingQty = true;
           _commitQtyValue(itemId);
           _isSubmittingQty = false;
-          // After QTY → focus T.P
-          tpFocusNodes[itemId]?.requestFocus();
-          tpControllers[itemId]?.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: tpControllers[itemId]!.text.length);
+          // ★ QTY → T.P
+          _focusCartItemTp(index);
         },
       ),
     );
   }
 
+  // ── T.P cell  (Enter → focus R.P) ─────────────────────────────────────────
   Widget _buildEditableTpCell(PurchaseItem item, {required int index}) {
     final itemId = item.productId;
     final controller = tpControllers[itemId];
@@ -1305,7 +1461,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     if (controller == null || focusNode == null) {
       return _buildDataCell(item.tradePrice.toStringAsFixed(0), flex: 2);
     }
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
 
     return Expanded(
       flex: 2,
@@ -1329,35 +1485,31 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           filled: true,
           fillColor:
               isReadOnly ? const Color(0xFFE0E0E0) : Colors.green.shade50,
-          border:
-              OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
-            borderSide:
-                const BorderSide(color: Colors.green, width: 2),
+            borderSide: const BorderSide(color: Colors.green, width: 2),
           ),
         ),
         onSubmitted: (value) {
           _commitTpValue(itemId);
-          // After T.P → focus R.P
-          rpFocusNodes[itemId]?.requestFocus();
-          rpControllers[itemId]?.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: rpControllers[itemId]!.text.length);
+          // ★ T.P → R.P
+          _focusCartItemRp(index);
         },
       ),
     );
   }
 
+  // ── R.P cell  (Enter → focus DIS) ─────────────────────────────────────────
   Widget _buildEditableRpCell(PurchaseItem item, {required int index}) {
     final itemId = item.productId;
     final controller = rpControllers[itemId];
     final focusNode = rpFocusNodes[itemId];
     if (controller == null || focusNode == null) {
-      return _buildDataCell(
-          (item.retailPrice ?? 0).toStringAsFixed(0), flex: 2);
+      return _buildDataCell((item.retailPrice ?? 0).toStringAsFixed(0),
+          flex: 2);
     }
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
 
     return Expanded(
       flex: 2,
@@ -1381,103 +1533,90 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           filled: true,
           fillColor:
               isReadOnly ? const Color(0xFFE0E0E0) : Colors.purple.shade50,
-          border:
-              OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
-            borderSide:
-                const BorderSide(color: Colors.purple, width: 2),
+            borderSide: const BorderSide(color: Colors.purple, width: 2),
           ),
         ),
         onSubmitted: (value) {
           _commitRpValue(itemId);
-          // After R.P → focus DIS
-          disFocusNodes[itemId]?.requestFocus();
-          disControllers[itemId]?.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: disControllers[itemId]!.text.length);
+          // ★ R.P → DIS
+          _focusCartItemDis(index);
         },
       ),
     );
   }
 
-  // ── UPDATED: Discount cell with percentage indicator ──
-  Widget _buildEditableDisCell(PurchaseItem item,
-      {required int index}) {
+  // ── DIS cell  (Enter → back to search) ────────────────────────────────────
+  Widget _buildEditableDisCell(PurchaseItem item, {required int index}) {
     final itemId = item.productId;
     final controller = disControllers[itemId];
     final focusNode = disFocusNodes[itemId];
     if (controller == null || focusNode == null) {
-      return _buildDataCell(
-          '${(item.discount ?? 0).toStringAsFixed(0)}%', flex: 1);
+      return _buildDataCell('${(item.discount ?? 0).toStringAsFixed(0)}%',
+          flex: 1);
     }
-    bool isReadOnly = _isPurchaseCompleted && !_isEditMode;
+    final isReadOnly = _isPurchaseCompleted && !_isEditMode;
 
     return Expanded(
       flex: 1,
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              textAlign: TextAlign.center,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              readOnly: isReadOnly,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: (item.discount ?? 0) > 0 
-                    ? Colors.orange.shade800 
-                    : Colors.grey.shade600,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                // Custom formatter to limit to 100
-                _PercentageInputFormatter(),
-              ],
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                filled: true,
-                fillColor: isReadOnly
-                    ? const Color(0xFFE0E0E0)
-                    : (item.discount ?? 0) > 0 
-                        ? Colors.orange.shade100 
-                        : Colors.orange.shade50,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide:
-                      const BorderSide(color: Colors.orange, width: 2),
-                ),
-                // Add % suffix
-                suffixText: '%',
-                suffixStyle: TextStyle(
-                  fontSize: 10,
-                  color: Colors.orange.shade700,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onSubmitted: (value) {
-                _isSubmittingDis = true;
-                _commitDisValue(itemId);
-                _isSubmittingDis = false;
-                _returnFocusToSearch();
-              },
-            ),
-          ),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        textAlign: TextAlign.center,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        readOnly: isReadOnly,
+        style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: (item.discount ?? 0) > 0
+                ? Colors.orange.shade800
+                : Colors.grey.shade600),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+          _PercentageInputFormatter(),
         ],
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          filled: true,
+          fillColor: isReadOnly
+              ? const Color(0xFFE0E0E0)
+              : ((item.discount ?? 0) > 0
+                  ? Colors.orange.shade100
+                  : Colors.orange.shade50),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: const BorderSide(color: Colors.orange, width: 2),
+          ),
+          suffixText: '%',
+          suffixStyle: TextStyle(
+              fontSize: 10,
+              color: Colors.orange.shade700,
+              fontWeight: FontWeight.bold),
+        ),
+        onSubmitted: (value) {
+          _isSubmittingDis = true;
+          _commitDisValue(itemId);
+          _isSubmittingDis = false;
+          // ★ DIS → back to Search
+          _returnFocusToSearch();
+        },
       ),
     );
   }
 
+  // ============================================================
+  // SEARCH PANEL
+  // ============================================================
+
   Widget _buildSearchPanel() {
     final filtered = allProducts
-        .where((p) =>
-            p.itemName.toLowerCase().contains(searchQuery.toLowerCase()))
+        .where(
+            (p) => p.itemName.toLowerCase().contains(searchQuery.toLowerCase()))
         .toList();
 
     return Container(
@@ -1488,26 +1627,46 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       ),
       child: Column(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFD3D3D3),
-              borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(4)),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: const Center(
-              child: Text('Search Item',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-          ),
+          // ── Panel header with shortcut hints ──────────────────────────────
+          // Container(
+          //   decoration: const BoxDecoration(
+          //     color: Color(0xFFD3D3D3),
+          //     borderRadius: BorderRadius.only(
+          //         topLeft: Radius.circular(4), topRight: Radius.circular(4)),
+          //   ),
+          //   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          //   child: Column(
+          //     children: [
+          //       const Text('Search Item',
+          //           style:
+          //               TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          //       const SizedBox(height: 6),
+          //       // Shortcut hint row
+          //       Wrap(
+          //         spacing: 6,
+          //         runSpacing: 4,
+          //         alignment: WrapAlignment.center,
+          //         children: [
+          //           _buildShortcutChip('Ctrl+S', 'Save', Colors.blue),
+          //           _buildShortcutChip('Ctrl+A', 'Add New', Colors.green),
+          //           _buildShortcutChip('Ctrl+F', 'Find', Colors.purple),
+          //           _buildShortcutChip('Ctrl+P', 'Print', Colors.indigo),
+          //           _buildShortcutChip('F1', 'Unit', Colors.teal),
+          //           _buildShortcutChip('F2', 'QTY', Colors.orange),
+          //           _buildShortcutChip('F3', 'DIS%', Colors.red),
+          //           _buildShortcutChip('Esc', 'Search', Colors.grey),
+          //         ],
+          //       ),
+          //     ],
+          //   ),
+          // ),
           Expanded(
             child: Container(
               color: const Color(0xFFD3D3D3),
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
+                  // ── Search text field ──────────────────────────────────────
                   Focus(
                     onKeyEvent: _handleKeyEvent,
                     child: TextField(
@@ -1517,13 +1676,12 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                       onChanged: (value) {
                         setState(() {
                           searchQuery = value;
-                          selectedSearchIndex =
-                              value.isNotEmpty ? 0 : -1;
+                          selectedSearchIndex = value.isNotEmpty ? 0 : -1;
                           isNavigatingCart = false;
                         });
                       },
                       decoration: const InputDecoration(
-                        hintText: 'Search...',
+                        hintText: 'Search... (↑↓ navigate, Enter to add)',
                         prefixIcon: Icon(Icons.search, size: 20),
                         filled: true,
                         fillColor: Colors.white,
@@ -1531,27 +1689,33 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                       ),
                     ),
                   ),
+                  // const SizedBox(height: 8),
+                  // // Workflow hint
+                  // Container(
+                  //   padding: const EdgeInsets.all(8),
+                  //   decoration: BoxDecoration(
+                  //     color: Colors.green.shade50,
+                  //     borderRadius: BorderRadius.circular(4),
+                  //   ),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.center,
+                  //     children: [
+                  //       _buildFlowStep('Search', Icons.search),
+                  //       const Icon(Icons.arrow_forward, size: 12),
+                  //       _buildFlowStep('QTY', Icons.numbers),
+                  //       const Icon(Icons.arrow_forward, size: 12),
+                  //       _buildFlowStep('T.P', Icons.monetization_on_outlined),
+                  //       const Icon(Icons.arrow_forward, size: 12),
+                  //       _buildFlowStep('R.P', Icons.price_change_outlined),
+                  //       const Icon(Icons.arrow_forward, size: 12),
+                  //       _buildFlowStep('DIS%', Icons.percent),
+                  //       const Icon(Icons.arrow_forward, size: 12),
+                  //       _buildFlowStep('Search', Icons.refresh),
+                  //     ],
+                  //   ),
+                  // ),
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildFlowStep('Search', Icons.search),
-                        const Icon(Icons.arrow_forward, size: 12),
-                        _buildFlowStep('QTY', Icons.numbers),
-                        const Icon(Icons.arrow_forward, size: 12),
-                        _buildFlowStep('DIS%', Icons.percent),
-                        const Icon(Icons.arrow_forward, size: 12),
-                        _buildFlowStep('Search', Icons.refresh),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  // ── Product list ───────────────────────────────────────────
                   Expanded(
                     child: filtered.isEmpty
                         ? const Center(
@@ -1561,8 +1725,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                             itemCount: filtered.length,
                             itemBuilder: (context, index) {
                               final product = filtered[index];
-                              final isSelected =
-                                  index == selectedSearchIndex;
+                              final isSelected = index == selectedSearchIndex;
                               final tierCount =
                                   product.conversionTiers?.length ??
                                       (product.hasUnitConversion ? 2 : 0);
@@ -1579,34 +1742,25 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                                       : null,
                                   title: Row(
                                     children: [
-                                      Expanded(
-                                          child:
-                                              Text(product.itemName)),
+                                      Expanded(child: Text(product.itemName)),
                                       if (product.hasUnitConversion)
                                         Container(
-                                          padding: const EdgeInsets
-                                              .symmetric(
-                                              horizontal: 6,
-                                              vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
                                             gradient: const LinearGradient(
-                                              colors: [
-                                                Color(0xFF10B981),
-                                                Color(0xFF3B82F6)
-                                              ],
-                                            ),
+                                                colors: [
+                                                  Color(0xFF10B981),
+                                                  Color(0xFF3B82F6)
+                                                ]),
                                             borderRadius:
-                                                BorderRadius.circular(
-                                                    4),
+                                                BorderRadius.circular(4),
                                           ),
-                                          child: Text(
-                                            '${tierCount + 1} Tiers',
-                                            style: const TextStyle(
-                                                fontSize: 9,
-                                                color: Colors.white,
-                                                fontWeight:
-                                                    FontWeight.bold),
-                                          ),
+                                          child: Text('${tierCount + 1} Tiers',
+                                              style: const TextStyle(
+                                                  fontSize: 9,
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold)),
                                         ),
                                     ],
                                   ),
@@ -1620,8 +1774,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                                         _buildTierPriceSubtitle(product),
                                     ],
                                   ),
-                                  onTap: () =>
-                                      _addToCartAndFocusQty(product),
+                                  onTap: () => _addToCartAndFocusQty(product),
                                 ),
                               );
                             },
@@ -1636,6 +1789,35 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
+  // Widget _buildShortcutChip(String key, String action, Color color) {
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+  //     decoration: BoxDecoration(
+  //       color: color.withOpacity(0.1),
+  //       borderRadius: BorderRadius.circular(4),
+  //       border: Border.all(color: color.withOpacity(0.3)),
+  //     ),
+  //     child: Row(
+  //       mainAxisSize: MainAxisSize.min,
+  //       children: [
+  //         Container(
+  //           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+  //           decoration: BoxDecoration(
+  //               color: color, borderRadius: BorderRadius.circular(3)),
+  //           child: Text(key,
+  //               style: const TextStyle(
+  //                   color: Colors.white,
+  //                   fontSize: 9,
+  //                   fontWeight: FontWeight.bold)),
+  //         ),
+  //         const SizedBox(width: 3),
+  //         Text(action,
+  //             style: TextStyle(fontSize: 9, color: Colors.grey.shade700)),
+  //       ],
+  //     ),
+  //   );
+  // }
+
   Widget _buildTierPriceSubtitle(Product product) {
     final options = _getUnitOptions(product);
     if (options.length <= 1) return const SizedBox.shrink();
@@ -1645,8 +1827,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
         children: options.skip(1).map((opt) {
           return Container(
             margin: const EdgeInsets.only(right: 6, top: 2),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: Colors.green.shade50,
               borderRadius: BorderRadius.circular(4),
@@ -1654,8 +1835,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
             ),
             child: Text(
               '${opt.displayName}: ${currencyFormat.format(opt.price)}',
-              style: TextStyle(
-                  fontSize: 10, color: Colors.green.shade700),
+              style: TextStyle(fontSize: 10, color: Colors.green.shade700),
             ),
           );
         }).toList(),
@@ -1663,119 +1843,31 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
-  Widget _buildFlowStep(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 12),
-          const SizedBox(width: 2),
-          Text(label, style: const TextStyle(fontSize: 9)),
-        ],
-      ),
-    );
-  }
+  // Widget _buildFlowStep(String label, IconData icon) {
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(4),
+  //       border: Border.all(color: Colors.grey.shade300),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         Icon(icon, size: 12),
+  //         const SizedBox(width: 2),
+  //         Text(label, style: const TextStyle(fontSize: 9)),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  void _addToCartAndFocusQty(Product p) {
-    if (_isPurchaseCompleted && !_isEditMode) return;
-    int targetProductId = p.id!;
-
-    setState(() {
-      final existIndex =
-          cart.indexWhere((e) => e.productId == targetProductId);
-
-      if (existIndex != -1) {
-        final item = cart[existIndex];
-        final newQty = item.quantity + 1;
-        cart[existIndex] = item.copyWith(quantity: newQty);
-        qtyControllers[targetProductId]?.text = newQty.toString();
-      } else {
-        final defaultUnit = p.hasUnitConversion
-            ? (p.baseUnit ?? 'Tablet')
-            : (p.issueUnit ?? 'Pc');
-        final defaultPrice = p.hasUnitConversion
-            ? (p.pricePerUnit ?? p.tradePrice)
-            : p.tradePrice;
-        final defaultRetailPrice = p.retailPrice ?? 0.0;
-
-        cart.add(PurchaseItem(
-          productId: targetProductId,
-          productName: p.itemName,
-          tradePrice: defaultPrice,
-          retailPrice: defaultRetailPrice,
-          quantity: 1,
-          packing: p.issueUnit,
-          discount: 0, // Default 0%
-          salesTax: 0,
-          unitType: defaultUnit,
-          baseQuantity: 1,
-        ));
-
-        cartProductData[targetProductId] = p;
-        selectedUnits[targetProductId] = defaultUnit;
-
-        qtyControllers[targetProductId] =
-            TextEditingController(text: '1');
-        qtyFocusNodes[targetProductId] =
-            _createQtyFocusNode(targetProductId);
-        disControllers[targetProductId] =
-            TextEditingController(text: '0'); // 0%
-        disFocusNodes[targetProductId] =
-            _createDisFocusNode(targetProductId);
-        unitFocusNodes[targetProductId] =
-            _createUnitFocusNode(targetProductId);
-
-        tpControllers[targetProductId] =
-            TextEditingController(text: defaultPrice.toStringAsFixed(0));
-        tpFocusNodes[targetProductId] =
-            _createTpFocusNode(targetProductId);
-        rpControllers[targetProductId] = TextEditingController(
-            text: defaultRetailPrice.toStringAsFixed(0));
-        rpFocusNodes[targetProductId] =
-            _createRpFocusNode(targetProductId);
-      }
-
-      selectedCartIndex =
-          cart.indexWhere((e) => e.productId == targetProductId);
-      isNavigatingCart = true;
-      searchController.clear();
-      searchQuery = '';
-      selectedSearchIndex = -1;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final focusNode = qtyFocusNodes[targetProductId];
-      final controller = qtyControllers[targetProductId];
-      if (focusNode != null && controller != null) {
-        focusNode.requestFocus();
-        controller.selection =
-            TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-      }
-    });
-  }
-
-  void _returnFocusToSearch() {
-    searchController.clear();
-    setState(() {
-      searchQuery = '';
-      selectedSearchIndex = -1;
-      selectedCartIndex = -1;
-      isNavigatingCart = false;
-    });
-    Future.microtask(() {
-      if (mounted) searchFocusNode.requestFocus();
-    });
-  }
+  // ============================================================
+  // BOTTOM SECTION
+  // ============================================================
 
   Widget _buildBottomSection() {
     return Column(
       children: [
-        // ── UPDATED: Added subtotal and discount summary ──
         Row(
           children: [
             Expanded(
@@ -1812,8 +1904,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildTotalField(
-                  'Balance', currencyFormat.format(balance),
+              child: _buildTotalField('Balance', currencyFormat.format(balance),
                   isNegative: balance > 0),
             ),
             const Expanded(flex: 2, child: SizedBox()),
@@ -1834,12 +1925,17 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                 disabled: _isPurchaseCompleted && !_isEditMode,
                 color: _isEditMode ? Colors.orange : Colors.blue,
                 icon: Icons.save,
+                shortcut: 'Ctrl+S',
               ),
               const SizedBox(width: 12),
-              _buildActionButton('ADD', _performSaveAndNew,
-                  disabled: cart.isEmpty,
-                  color: Colors.green[700],
-                  icon: Icons.add_circle),
+              _buildActionButton(
+                'ADD',
+                _performSaveAndNew,
+                disabled: cart.isEmpty,
+                color: Colors.green[700],
+                icon: Icons.add_circle,
+                shortcut: 'Ctrl+A',
+              ),
               const SizedBox(width: 12),
               if (_isPurchaseCompleted)
                 _buildActionButton(
@@ -1849,22 +1945,43 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
                   icon: _isEditMode ? Icons.lock : Icons.edit,
                 ),
               if (_isPurchaseCompleted) const SizedBox(width: 12),
-              _buildActionButton('FIND', _showFindDialog,
-                  icon: Icons.search),
+              _buildActionButton(
+                'FIND',
+                _showFindDialog,
+                icon: Icons.search,
+                shortcut: 'Ctrl+F',
+              ),
               const SizedBox(width: 12),
-              _buildActionButton('PRINT', () {},
-                  disabled: cart.isEmpty,
-                  color: Colors.blue[700],
-                  icon: Icons.print),
+              _buildActionButton(
+                'PRINT',
+                () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🖨️ Print feature coming soon!'),
+                      backgroundColor: Colors.blue,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                disabled: cart.isEmpty,
+                color: Colors.blue[700],
+                icon: Icons.print,
+                shortcut: 'Ctrl+P',
+              ),
               const SizedBox(width: 12),
-              _buildActionButton('CLOSE', () {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PremiumDashboardScreen()),
-                  (route) => false,
-                );
-              }, icon: Icons.close, color: Colors.red[400]),
+              _buildActionButton(
+                'CLOSE',
+                () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const PremiumDashboardScreen()),
+                    (route) => false,
+                  );
+                },
+                icon: Icons.close,
+                color: Colors.red[400],
+              ),
             ],
           ),
         ),
@@ -1873,25 +1990,25 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   }
 
   Widget _buildTotalField(String label, String value,
-      {bool highlight = false, bool isNegative = false, bool isDiscount = false}) {
+      {bool highlight = false,
+      bool isNegative = false,
+      bool isDiscount = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w500)),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
         Container(
           width: double.infinity,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: highlight
                 ? Colors.green.shade100
                 : (isNegative
                     ? Colors.red.shade50
-                    : (isDiscount 
-                        ? Colors.orange.shade50 
+                    : (isDiscount
+                        ? Colors.orange.shade50
                         : const Color(0xFFD3D3D3))),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
@@ -1919,27 +2036,45 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
     );
   }
 
-  Widget _buildActionButton(String label, VoidCallback onPressed,
-      {bool disabled = false, Color? color, IconData? icon}) {
-    return ElevatedButton.icon(
-      onPressed: disabled ? null : onPressed,
-      icon: icon != null
-          ? Icon(icon, size: 18)
-          : const SizedBox.shrink(),
-      label: Text(label,
-          style: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w600)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor:
-            disabled ? Colors.grey : (color ?? const Color(0xFFD3D3D3)),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(
-            horizontal: 20, vertical: 12),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6)),
+  Widget _buildActionButton(
+    String label,
+    VoidCallback onPressed, {
+    bool disabled = false,
+    Color? color,
+    IconData? icon,
+    String? shortcut,
+  }) {
+    return Tooltip(
+      message: shortcut != null ? '$label  ($shortcut)' : label,
+      child: ElevatedButton.icon(
+        onPressed: disabled ? null : onPressed,
+        icon: icon != null ? Icon(icon, size: 18) : const SizedBox.shrink(),
+        label: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            if (shortcut != null)
+              Text(shortcut,
+                  style: TextStyle(
+                      fontSize: 9, color: Colors.white.withOpacity(0.75))),
+          ],
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              disabled ? Colors.grey : (color ?? const Color(0xFFD3D3D3)),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
       ),
     );
   }
+
+  // ============================================================
+  // SAVE / NEW / EDIT
+  // ============================================================
 
   Future<void> _savePurchase({required bool updateExisting}) async {
     if (cart.isEmpty) {
@@ -1948,43 +2083,41 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       return;
     }
     if (selectedSupplier == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select a supplier!')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Select a supplier!')));
       return;
     }
 
-    // Commit any unsaved values
     for (final item in cart) {
       _commitTpValue(item.productId);
       _commitRpValue(item.productId);
       _commitDisValue(item.productId);
     }
 
-    final purchase = Purchase(
-      invoiceNumber: invoiceController.text,
-      date: DateTime.now(),
-      supplierName: selectedSupplier!.name,
-      totalAmount: totalAmount,
-      amountPaid: amountPaid,
-      items: cart
-          .map((e) => PurchaseItem(
-                productId: e.productId,
-                productName: e.productName,
-                quantity: e.quantity,
-                tradePrice: e.tradePrice,
-                retailPrice: e.retailPrice,
-                discount: e.discount, // This is now percentage
-                salesTax: e.salesTax,
-                unitType: e.unitType,
-                baseQuantity: e.baseQuantity,
-              ))
-          .toList(),
-    );
-
     try {
-      await DatabaseHelper.instance.addPurchase(purchase);
+      await DatabaseHelper.instance.addPurchaseWithDetails(
+        invoiceNumber: invoiceController.text,
+        date: DateTime.now(),
+        supplierId: selectedSupplier!.id!,
+        supplierName: selectedSupplier!.name,
+        totalAmount: totalAmount,
+        amountPaid: amountPaid,
+        items: cart
+            .map((e) => PurchaseItem(
+                  productId: e.productId,
+                  productName: e.productName,
+                  quantity: e.quantity,
+                  tradePrice: e.tradePrice,
+                  retailPrice: e.retailPrice,
+                  discount: e.discount,
+                  salesTax: e.salesTax,
+                  unitType: e.unitType,
+                  baseQuantity: e.baseQuantity,
+                ))
+            .toList(),
+        notes: null,
+      );
 
-      // Update product prices in DB
       for (final item in cart) {
         final product = cartProductData[item.productId];
         if (product != null) {
@@ -2003,24 +2136,36 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
       setState(() {
         _isPurchaseCompleted = true;
         _isEditMode = false;
-        supplierBalanceController.text =
-            actualNewBalance.toStringAsFixed(0);
+        supplierBalanceController.text = actualNewBalance.toStringAsFixed(0);
       });
+
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Purchase saved & product prices updated!'),
+        content: Text('✅ Purchase saved & stock updated!'),
         backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
       ));
     } catch (e) {
+      debugPrint('❌ Purchase save error: $e');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'), backgroundColor: Colors.red));
+        content: Text('Error saving purchase: $e'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ));
     }
   }
 
   Future<void> _performSaveAndNew() async {
     if (cart.isEmpty) return;
     if (!_isPurchaseCompleted) {
-      await _savePurchase(updateExisting: false);
-    } else if (_isEditMode) {
+     ScaffoldMessenger.of(context).showSnackBar(
+       const SnackBar(
+         content: Text('Please save the purchase first before printing!'),
+         backgroundColor: Colors.orange,
+       ),
+     );
+     return;
+   }
+    else if (_isEditMode) {
       await _savePurchase(updateExisting: true);
     }
     _resetForNewPurchase();
@@ -2033,23 +2178,41 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   void _resetForNewPurchase() {
     setState(() {
       cart.clear();
-      for (var c in qtyControllers.values) { c.dispose(); }
+      for (var c in qtyControllers.values) {
+        c.dispose();
+      }
       qtyControllers.clear();
-      for (var n in qtyFocusNodes.values) { n.dispose(); }
+      for (var n in qtyFocusNodes.values) {
+        n.dispose();
+      }
       qtyFocusNodes.clear();
-      for (var c in disControllers.values) { c.dispose(); }
+      for (var c in disControllers.values) {
+        c.dispose();
+      }
       disControllers.clear();
-      for (var n in disFocusNodes.values) { n.dispose(); }
+      for (var n in disFocusNodes.values) {
+        n.dispose();
+      }
       disFocusNodes.clear();
-      for (var n in unitFocusNodes.values) { n.dispose(); }
+      for (var n in unitFocusNodes.values) {
+        n.dispose();
+      }
       unitFocusNodes.clear();
-      for (var c in tpControllers.values) { c.dispose(); }
+      for (var c in tpControllers.values) {
+        c.dispose();
+      }
       tpControllers.clear();
-      for (var n in tpFocusNodes.values) { n.dispose(); }
+      for (var n in tpFocusNodes.values) {
+        n.dispose();
+      }
       tpFocusNodes.clear();
-      for (var c in rpControllers.values) { c.dispose(); }
+      for (var c in rpControllers.values) {
+        c.dispose();
+      }
       rpControllers.clear();
-      for (var n in rpFocusNodes.values) { n.dispose(); }
+      for (var n in rpFocusNodes.values) {
+        n.dispose();
+      }
       rpFocusNodes.clear();
       selectedUnits.clear();
       cartProductData.clear();
@@ -2076,8 +2239,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
   void _enableEditMode() {
     setState(() => _isEditMode = !_isEditMode);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-          _isEditMode ? 'Edit mode enabled' : 'Edit mode disabled'),
+      content: Text(_isEditMode ? 'Edit mode enabled' : 'Edit mode disabled'),
       backgroundColor: _isEditMode ? Colors.orange : Colors.blue,
     ));
   }
@@ -2090,8 +2252,7 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
         title: const Text('Find Purchase'),
         content: TextField(
           controller: findController,
-          decoration:
-              const InputDecoration(hintText: 'Invoice Number'),
+          decoration: const InputDecoration(hintText: 'Invoice Number'),
         ),
         actions: [
           TextButton(
@@ -2100,36 +2261,14 @@ class _PurchaseScreenDesktopState extends State<PurchaseScreenDesktop> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Find feature coming soon!')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Find feature coming soon!')));
             },
             child: const Text('Find'),
           ),
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    invoiceController.dispose();
-    dateController.dispose();
-    supplierNameController.dispose();
-    supplierBalanceController.dispose();
-    searchController.dispose();
-    amountPaidController.dispose();
-    searchFocusNode.dispose();
-    _mainFocusNode.dispose();
-    for (var c in qtyControllers.values) { c.dispose(); }
-    for (var n in qtyFocusNodes.values) { n.dispose(); }
-    for (var c in disControllers.values) { c.dispose(); }
-    for (var n in disFocusNodes.values) { n.dispose(); }
-    for (var n in unitFocusNodes.values) { n.dispose(); }
-    for (var c in tpControllers.values) { c.dispose(); }
-    for (var n in tpFocusNodes.values) { n.dispose(); }
-    for (var c in rpControllers.values) { c.dispose(); }
-    for (var n in rpFocusNodes.values) { n.dispose(); }
-    super.dispose();
   }
 }
 
@@ -2153,7 +2292,7 @@ class _UnitOption {
 }
 
 // ============================================================
-// PERCENTAGE INPUT FORMATTER (0-100)
+// PERCENTAGE INPUT FORMATTER (0–100)
 // ============================================================
 class _PercentageInputFormatter extends TextInputFormatter {
   @override
@@ -2161,31 +2300,17 @@ class _PercentageInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.isEmpty) {
-      return newValue;
-    }
-    
+    if (newValue.text.isEmpty) return newValue;
     final double? value = double.tryParse(newValue.text);
-    if (value == null) {
-      return oldValue;
-    }
-    
-    // Limit to 100%
+    if (value == null) return oldValue;
     if (value > 100) {
       return const TextEditingValue(
-        text: '100',
-        selection: TextSelection.collapsed(offset: 3),
-      );
+          text: '100', selection: TextSelection.collapsed(offset: 3));
     }
-    
-    // Prevent negative values
     if (value < 0) {
       return const TextEditingValue(
-        text: '0',
-        selection: TextSelection.collapsed(offset: 1),
-      );
+          text: '0', selection: TextSelection.collapsed(offset: 1));
     }
-    
     return newValue;
   }
 }

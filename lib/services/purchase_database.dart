@@ -26,15 +26,24 @@ class PurchaseRepository {
         'purchaseId': purchaseId,
         'productId': item.productId,
         'productName': item.productName,
+        'packing': item.packing,
         'quantity': item.quantity,
         'tradePrice': item.tradePrice,
+        'retailPrice': item.retailPrice ?? 0,
+        'discount': item.discount ?? 0,
+        'salesTax': item.salesTax ?? 0,
         'lineTotal': item.lineTotal,
+        'unitType': item.unitType,
+        'baseQuantity': item.baseQuantity,
+        'expiryDate': item.expiryDate,
+        'batchNumber': item.batchNumber,
       });
 
       // Update stock
+      final stockToAdd = item.baseQuantity ?? item.quantity;
       await db.rawUpdate(
         'UPDATE products SET stock = stock + ? WHERE id = ?',
-        [item.quantity, item.productId],
+        [stockToAdd, item.productId],
       );
     }
 

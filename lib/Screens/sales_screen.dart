@@ -12,6 +12,8 @@ import 'package:medical_app/models/product.dart';
 import 'package:medical_app/models/sale_item.dart';
 import 'package:medical_app/services/database_helper.dart';
 import 'package:medical_app/Screens/dashboardScreen.dart';
+import 'package:medical_app/services/printer_service.dart';
+import 'package:medical_app/widgets/print_settings_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:medical_app/services/thermal_print_service_3inch.dart';
@@ -42,12 +44,10 @@ class SaleScreenDesktop extends StatefulWidget {
 }
 
 class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
-  double? _loadedPreviousBalance; // null = use live customer balance
   // ── Controllers ──────────────────────────────────────────────
   final TextEditingController invoiceController = TextEditingController();
   final TextEditingController dateController = TextEditingController();
   final TextEditingController customerNameController = TextEditingController();
-  final TextEditingController customerBalanceController = TextEditingController();
   final TextEditingController searchController = TextEditingController();
   final TextEditingController amountPaidController = TextEditingController();
 
@@ -72,6 +72,9 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
 
   bool _isSubmittingQty = false;
   bool _isSubmittingDis = false;
+  Product? _hoveredProduct;
+  Product? _focusedProduct;
+  Product? get _stockPreviewProduct => _focusedProduct ?? _hoveredProduct;
 
   // ── Data ──────────────────────────────────────────────────────
   List<Product> allProducts = [];
@@ -110,7 +113,6 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
     _setCurrentDate();
     _loadProducts();
     _loadCustomers();
-    customerBalanceController.text = '0.00';
     amountPaidController.addListener(_onAmountPaidChanged);
     WidgetsBinding.instance
         .addPostFrameCallback((_) => searchFocusNode.requestFocus());
@@ -133,9 +135,13 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
       return KeyEventResult.handled;
     }
     if (isCtrl && key == LogicalKeyboardKey.keyP) {
-      _showSlipPreview();
-      return KeyEventResult.handled;
-    }
+     if (cart.isNotEmpty && _isSaleCompleted) {
+       _showSlipPreview();
+     } else {
+       _snack('Please save the sale first before printing!', Colors.orange);
+     }
+     return KeyEventResult.handled;
+   }
     if (isCtrl && key == LogicalKeyboardKey.keyF) {
       _showFindInvoiceDialog();
       return KeyEventResult.handled;
@@ -235,11 +241,8 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
             selectedCustomer = c;
             if (c != null) {
               customerNameController.text = c.name;
-              customerBalanceController.text =
-                  c.openingBalance.toStringAsFixed(0);
             } else {
               customerNameController.text = 'Walk-in Customer';
-              customerBalanceController.text = '0.00';
             }
             _customerDropdownOpen = false;
           });
@@ -271,10 +274,10 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   //  MISC HELPERS
   // ══════════════════════════════════════════════════════════════
   void _onAmountPaidChanged() => setState(() {});
- Future<void> _generateInvoiceNumber() async {
-  int nextNumber = await DatabaseHelper.instance.getLastInvoiceNumber();
 
-  invoiceController.text = '-${nextNumber.toString().padLeft(4, '0')}';
+  Future<void> _generateInvoiceNumber() async {
+  int nextNumber = await DatabaseHelper.instance.getLastInvoiceNumber();
+  invoiceController.text = nextNumber.toString().padLeft(5, '0');
 }
 
   void _setCurrentDate() {
@@ -292,7 +295,7 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  BALANCE CALCULATIONS
+  //  BALANCE CALCULATIONS  (no previous/opening balance)
   // ══════════════════════════════════════════════════════════════
   double get totalQuantity => cart.fold(0, (s, i) => s + i.quantity).toDouble();
   double get subtotalAmount =>
@@ -306,45 +309,29 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   double get amountAfterDiscount => subtotalAmount - totalDiscount;
   double get taxAmount => amountAfterDiscount * 0.0;
   double get saleAmount => amountAfterDiscount + taxAmount;
-  double get previousBalance =>
-      _loadedPreviousBalance ?? selectedCustomer?.openingBalance ?? 0.0;
-  double get totalDue => previousBalance + saleAmount;
   double get amountPaid => double.tryParse(amountPaidController.text) ?? 0.0;
-  double get remainingBalance => totalDue - amountPaid;
+  double get remainingBalance => saleAmount - amountPaid;
 
-Map<String, double> _calculateBalances() {
-  double subtotal = subtotalAmount;
+  Map<String, double> _calculateBalances() {
+    final subtotal = subtotalAmount;
+    final discount = totalDiscount;
+    final afterDiscount = subtotal - discount;
+    final tax = taxAmount;
+    final sale = afterDiscount + tax;
+    final paid = double.tryParse(amountPaidController.text) ?? 0;
+    double remaining = sale - paid;
+    if (remaining < 0) remaining = 0;
 
-  double discount = totalDiscount;
-
-  double afterDiscount = subtotal - discount;
-
-  double tax = taxAmount;
-
-  double sale = afterDiscount + tax;
-
-  double prev = previousBalance;
-
-  double due = prev + sale;
-
-  double paid = double.tryParse(amountPaidController.text) ?? 0;
-
-  double remaining = due - paid;
-
-  if (remaining < 0) remaining = 0;
-
-  return {
-    'subtotal': subtotal,
-    'discount': discount,
-    'amountAfterDiscount': afterDiscount,
-    'tax': tax,
-    'saleAmount': sale,
-    'previousBalance': prev,
-    'totalDue': due,
-    'amountPaid': paid,
-    'remainingBalance': remaining,
-  };
-}
+    return {
+      'subtotal': subtotal,
+      'discount': discount,
+      'amountAfterDiscount': afterDiscount,
+      'tax': tax,
+      'saleAmount': sale,
+      'amountPaid': paid,
+      'remainingBalance': remaining,
+    };
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  FOCUS NODE FACTORIES
@@ -352,8 +339,13 @@ Map<String, double> _calculateBalances() {
   FocusNode _createQtyFocusNode(int productId) {
     final node = FocusNode();
     node.addListener(() {
-      if (!node.hasFocus && mounted && !_isSubmittingQty)
-        _commitQtyValue(productId);
+      if (node.hasFocus) {
+        // show this product's stock when qty field is focused
+        setState(() => _focusedProduct = cartProductData[productId]);
+      } else {
+        if (mounted && !_isSubmittingQty) _commitQtyValue(productId);
+        setState(() => _focusedProduct = null);
+      }
     });
     return node;
   }
@@ -361,8 +353,12 @@ Map<String, double> _calculateBalances() {
   FocusNode _createDisFocusNode(int productId) {
     final node = FocusNode();
     node.addListener(() {
-      if (!node.hasFocus && mounted && !_isSubmittingDis)
-        _commitDisValue(productId);
+      if (node.hasFocus) {
+        setState(() => _focusedProduct = cartProductData[productId]);
+      } else {
+        if (mounted && !_isSubmittingDis) _commitDisValue(productId);
+        setState(() => _focusedProduct = null);
+      }
     });
     return node;
   }
@@ -960,22 +956,22 @@ Map<String, double> _calculateBalances() {
   //  SLIP PREVIEW
   // ══════════════════════════════════════════════════════════════
   Future<void> _showSlipPreview() async {
-    if (cart.isEmpty) {
-      _snack('No items to preview!', Colors.orange);
-      return;
-    }
-    final prefs = await SharedPreferences.getInstance();
+    if (!_isSaleCompleted) {
+     _snack('Please save the sale first before printing!', Colors.orange);
+     return;
+   }
+    final settings = await DatabaseHelper.instance.getCompanySettings();
     final balances = _calculateBalances();
     await showDialog(
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.black87,
       builder: (_) => SlipPreviewScreen(
-        shopName: prefs.getString('shop_name') ?? 'MEDICAL STORE',
-        shopAddress: prefs.getString('shop_address') ?? '123 Main Street, City',
-        shopPhone: prefs.getString('shop_phone') ?? '0300-1234567',
+        shopName: settings['shop_name'] ?? 'MADINA MEDICAL',
+        shopAddress: settings['shop_address'] ?? 'Nagan chorangi',
+        shopPhone: settings['shop_phone'] ?? '0300-1234567',
         shopTagline:
-            prefs.getString('shop_tagline') ?? 'Thank you for your purchase!',
+            settings['shop_tagline'] ?? 'Thank you for your purchase!',
         invoiceNumber: 'INV${invoiceController.text}',
         date: dateController.text,
         customerName: selectedCustomer?.name ?? 'Walk-in Customer',
@@ -989,118 +985,170 @@ Map<String, double> _calculateBalances() {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  PRINT INVOICE (builds receipt bytes only — no BT sending)
+  //  PRINT INVOICE
   // ══════════════════════════════════════════════════════════════
-  Future<void> _printInvoice() async {
-    if (cart.isEmpty) {
-      _snack('No items to print!', Colors.orange);
-      return;
-    }
-    final selectedSize = await _showPrintSizeDialog();
-    if (selectedSize == null) return;
+// In your invoice/sale page — replace existing _printInvoice
 
-    showDialog(
+final _printerService = PrinterService();
+
+// In your sale page
+
+// final _printerService = PrinterService();
+
+Future<void> _printInvoice() async {
+  if (cart.isEmpty) {
+    _snack('No items to print!', Colors.orange);
+    return;
+  }
+
+  // ─── 1. CHECK CONNECTION ──────────────────────────────
+  if (!_printerService.isConnected) {
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-          child: Card(
-              child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Preparing receipt…'),
-        ]),
-      ))),
+      builder: (_) => const PrintSettingsDialog(),
     );
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final shopName = prefs.getString('shop_name') ?? 'MEDICAL STORE';
-      final shopAddress =
-          prefs.getString('shop_address') ?? '123 Main Street, City';
-      final shopPhone = prefs.getString('shop_phone') ?? '0300-1234567';
-      final shopTagline =
-          prefs.getString('shop_tagline') ?? 'Thank you for your purchase!';
-      final balances = _calculateBalances();
-      final customerName = selectedCustomer?.name ?? 'Walk-in Customer';
-      final invoiceNumber = 'INV${invoiceController.text}';
-      final date = dateController.text;
-
-      final Uint8List bytes;
-      if (selectedSize == '3inch') {
-        final items3 = cart
-            .map((item) => ReceiptItem(
-                  qty: item.quantity,
-                  productName: item.productName,
-                  tradePrice: item.tradePrice ?? 0,
-                  retailPrice: item.price,
-                  discountPercent: item.discount ?? 0,
-                  lineTotal: _getItemLineTotal(item),
-                ))
-            .toList();
-        bytes = await ThermalPrintService3Inch.buildReceipt(
-          shopName: shopName,
-          shopAddress: shopAddress,
-          shopPhone: shopPhone,
-          shopTagline: shopTagline,
-          invoiceNumber: invoiceNumber,
-          date: date,
-          customerName: customerName,
-          items: items3,
-          subtotal: balances['subtotal']!,
-          totalDiscount: balances['discount']!,
-          tax: balances['tax']!,
-          saleAmount: balances['saleAmount']!,
-          previousBalance: balances['previousBalance']!,
-          totalDue: balances['totalDue']!,
-          amountPaid: balances['amountPaid']!,
-          remainingBalance: balances['remainingBalance']!,
-          paymentMethod: selectedPayment,
-        );
-      } else {
-        final items6 = cart
-            .map((item) => ReceiptItem6(
-                  qty: item.quantity,
-                  productName: item.productName,
-                  tradePrice: item.tradePrice ?? 0,
-                  retailPrice: item.price,
-                  discountPercent: item.discount ?? 0,
-                  lineTotal: _getItemLineTotal(item),
-                ))
-            .toList();
-        bytes = await ThermalPrintService6Inch.buildReceipt(
-          shopName: shopName,
-          shopAddress: shopAddress,
-          shopPhone: shopPhone,
-          shopTagline: shopTagline,
-          invoiceNumber: invoiceNumber,
-          date: date,
-          customerName: customerName,
-          items: items6,
-          subtotal: balances['subtotal']!,
-          totalDiscount: balances['discount']!,
-          tax: balances['tax']!,
-          saleAmount: balances['saleAmount']!,
-          previousBalance: balances['previousBalance']!,
-          totalDue: balances['totalDue']!,
-          amountPaid: balances['amountPaid']!,
-          remainingBalance: balances['remainingBalance']!,
-          paymentMethod: selectedPayment,
-        );
-      }
-
-      if (mounted) Navigator.pop(context);
-
-      // bytes are ready — inform user (no BT send)
-      _snack(
-          '✅ Receipt built (${bytes.length} bytes). Connect a printer to send.',
-          Colors.green);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _snack('Print Error: $e', Colors.red);
+    if (result == null || result['connected'] != true) {
+      _snack('⚠️ Connect a USB printer first', Colors.orange);
+      return;
     }
   }
+
+  // ─── 2. PICK SIZE ────────────────────────────────────
+  final selectedSize = await _showPrintSizeDialog();
+  if (selectedSize == null) return;
+
+  // ─── 3. LOADING DIALOG ───────────────────────────────
+  if (!mounted) return;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(
+      child: Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Printing…'),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  try {
+    // ─── 4. LOAD SHOP INFO ────────────────────────────
+    final settings    = await DatabaseHelper.instance.getCompanySettings();
+    final shopName    = settings['shop_name']    ?? 'MEDICAL STORE';
+    final shopAddress = settings['shop_address'] ?? '';
+    final shopPhone   = settings['shop_phone']   ?? '';
+    final shopTagline = settings['shop_tagline'] ?? '';
+
+    // ─── 5. PREPARE RECEIPT DATA ─────────────────────
+    final balances      = _calculateBalances();
+    final customerName  = selectedCustomer?.name ?? 'Walk-in Customer';
+    final invoiceNumber = 'INV${invoiceController.text}';
+    final date          = dateController.text;
+
+    // ─── 6. BUILD RECEIPT BYTES ───────────────────────
+    final Uint8List bytes;
+
+    if (selectedSize == '3inch') {
+      // ── 3-inch receipt ──────────────────────────────
+      final items3 = cart
+          .map(
+            (item) => ReceiptItem(
+              qty: item.quantity,
+              productName: item.productName,
+              tradePrice: item.tradePrice ?? 0,
+              retailPrice: item.price,
+              discountPercent: item.discount ?? 0,
+              lineTotal: _getItemLineTotal(item),
+            ),
+          )
+          .toList();
+
+      bytes = await ThermalPrintService80mm.buildReceipt(
+        shopName: shopName,
+        shopAddress: shopAddress,
+        shopPhone: shopPhone,
+        shopTagline: shopTagline,
+        invoiceNumber: invoiceNumber,
+        date: date,
+        customerName: customerName,
+        items: items3,
+        subtotal: balances['subtotal']!,
+        totalDiscount: balances['discount']!,
+        tax: balances['tax']!,
+        saleAmount: balances['saleAmount']!,
+        previousBalance: 0,
+        totalDue: balances['saleAmount']!,
+        amountPaid: balances['amountPaid']!,
+        remainingBalance: balances['remainingBalance']!,
+        paymentMethod: selectedPayment,
+      );
+    } else {
+      // ── 6-inch receipt ──────────────────────────────
+      final items6 = cart
+          .map(
+            (item) => ReceiptItem6(
+              qty: item.quantity,
+              productName: item.productName,
+              tradePrice: item.tradePrice ?? 0,
+              retailPrice: item.price,
+              discountPercent: item.discount ?? 0,
+              lineTotal: _getItemLineTotal(item),
+            ),
+          )
+          .toList();
+
+      bytes = await ThermalPrintService6Inch.buildReceipt(
+        shopName: shopName,
+        shopAddress: shopAddress,
+        shopPhone: shopPhone,
+        shopTagline: shopTagline,
+        invoiceNumber: invoiceNumber,
+        date: date,
+        customerName: customerName,
+        items: items6,
+        subtotal: balances['subtotal']!,
+        totalDiscount: balances['discount']!,
+        tax: balances['tax']!,
+        saleAmount: balances['saleAmount']!,
+        previousBalance: 0,
+        totalDue: balances['saleAmount']!,
+        amountPaid: balances['amountPaid']!,
+        remainingBalance: balances['remainingBalance']!,
+        paymentMethod: selectedPayment,
+      );
+    }
+
+    debugPrint('[Print] Receipt bytes: ${bytes.length}');
+
+    // ─── 7. SEND TO USB PRINTER ───────────────────────
+    final printed = await _printerService.printBytes(bytes);
+
+    // ─── 8. CLOSE LOADING ────────────────────────────
+    if (mounted) Navigator.of(context).pop();
+
+    // ─── 9. SHOW RESULT ──────────────────────────────
+    if (printed) {
+      _snack('✅ Receipt printed!', Colors.green);
+    } else {
+      _snack('❌ Print failed. Check USB connection.', Colors.red);
+    }
+  } catch (e, stackTrace) {
+    debugPrint('[Print] Error: $e');
+    debugPrint('[Print] StackTrace: $stackTrace');
+
+    if (mounted) Navigator.of(context).pop();
+    _snack('❌ Print Error: $e', Colors.red);
+  }
+}
 
   void _snack(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1158,6 +1206,8 @@ Map<String, double> _calculateBalances() {
                 _buildInvoiceAndCustomerSection(),
                 const SizedBox(height: 10),
                 Expanded(child: _buildItemsTable()),
+                const SizedBox(height: 8),
+                _buildStockInfoTab(),
                 const SizedBox(height: 16),
                 _buildBottomSection(),
               ],
@@ -1289,8 +1339,6 @@ Map<String, double> _calculateBalances() {
                   style: const TextStyle(color: Colors.white70, fontSize: 11)),
             ]),
           ),
-          const Icon(Icons.print_outlined, color: Colors.white54, size: 18),
-          const SizedBox(width: 8),
           IconButton(
             onPressed: () => _showSlipPreview(),
             icon: const Icon(Icons.print, color: Colors.white, size: 20),
@@ -1484,7 +1532,7 @@ Map<String, double> _calculateBalances() {
             child: _buildLabeledTextField(
                 label: 'Invoice ID',
                 controller:
-                    TextEditingController(text: 'INV${invoiceController.text}'),
+                    TextEditingController(text: invoiceController.text),
                 readOnly: true,
                 compact: compact)),
         SizedBox(width: compact ? 10 : 16),
@@ -1515,7 +1563,7 @@ Map<String, double> _calculateBalances() {
                   children: [
                 const Text('Invoice',
                     style: TextStyle(fontSize: 11, color: Colors.grey)),
-                Text('INV${invoiceController.text}',
+                Text(invoiceController.text,
                     style: const TextStyle(
                         fontSize: 14, fontWeight: FontWeight.w700)),
               ])),
@@ -1536,7 +1584,6 @@ Map<String, double> _calculateBalances() {
     );
   }
 
-  /// Simple print-ready indicator (replaces Bluetooth indicator).
   Widget _buildPrintIndicator({bool compact = false}) {
     return Container(
       padding: EdgeInsets.all(compact ? 6 : 8),
@@ -1555,6 +1602,7 @@ Map<String, double> _calculateBalances() {
     );
   }
 
+  // ── Customer card — no balance shown ──────────────────────────
   Widget _buildCustomerCard({bool compact = false}) {
     Customer? matchedCustomer;
     if (selectedCustomer != null) {
@@ -1573,11 +1621,10 @@ Map<String, double> _calculateBalances() {
         padding: EdgeInsets.all(compact ? 10 : 16),
         child: Row(children: [
           Expanded(
-            flex: 2,
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text('Customer *',
+                Text('Customer',
                     style: TextStyle(
                         fontSize: compact ? 12 : 13, color: Colors.black87)),
                 const SizedBox(width: 6),
@@ -1623,68 +1670,10 @@ Map<String, double> _calculateBalances() {
                               : Colors.grey.shade500),
                       overflow: TextOverflow.ellipsis,
                     )),
-                    if (matchedCustomer != null &&
-                        matchedCustomer.openingBalance > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Text(
-                            currencyFormat
-                                .format(matchedCustomer.openingBalance),
-                            style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.red.shade700,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    const SizedBox(width: 2),
                     Icon(Icons.arrow_drop_down,
                         color: Colors.grey.shade600, size: 18),
                   ]),
                 ),
-              ),
-            ]),
-          ),
-          SizedBox(width: compact ? 12 : 24),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Previous Balance',
-                  style: TextStyle(
-                      fontSize: compact ? 12 : 13, color: Colors.black87)),
-              const SizedBox(height: 5),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(
-                    horizontal: 10, vertical: compact ? 8 : 10),
-                decoration: BoxDecoration(
-                  color: previousBalance > 0
-                      ? Colors.red.shade50
-                      : const Color(0xFFD3D3D3),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: previousBalance > 0
-                          ? Colors.red.shade300
-                          : Colors.grey.shade400),
-                ),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(currencyFormat.format(previousBalance),
-                          style: TextStyle(
-                              fontSize: compact ? 12 : 14,
-                              fontWeight: FontWeight.w600,
-                              color: previousBalance > 0
-                                  ? Colors.red.shade700
-                                  : Colors.black87)),
-                      if (previousBalance > 0)
-                        Icon(Icons.warning_amber_rounded,
-                            size: 16, color: Colors.red.shade400),
-                    ]),
               ),
             ]),
           ),
@@ -1759,17 +1748,12 @@ Map<String, double> _calculateBalances() {
         ),
         Expanded(
           child: cart.isEmpty
-              ? Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      // Icon(Icons.shopping_cart_outlined,
-                      //     size: 40, color: Colors.grey.shade400),
-                      // const SizedBox(height: 8),
-                      const Text('No items added',
-                          style: TextStyle(color: Colors.grey, fontSize: 15)),
-                     
-                    ]))
+              ? const Center(
+                  child: Text(
+                    'No items added',
+                    style: TextStyle(color: Colors.grey, fontSize: 15),
+                  ),
+                )
               : ListView.builder(
                   itemCount: cart.length,
                   itemBuilder: (context, index) {
@@ -1777,32 +1761,54 @@ Map<String, double> _calculateBalances() {
                     final product = cartProductData[item.productId];
                     final isSelected =
                         isNavigatingCart && index == selectedCartIndex;
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.blue.shade50
-                            : (index.isEven
-                                ? Colors.white
-                                : Colors.grey.shade50),
-                        border: Border(
-                          bottom: BorderSide(
-                              color: Colors.grey.shade300, width: 0.5),
-                          left: isSelected
-                              ? const BorderSide(color: Colors.blue, width: 3)
-                              : BorderSide.none,
+
+                    return MouseRegion(
+                      onEnter: (_) => setState(() {
+                        _hoveredProduct = cartProductData[item.productId];
+                      }),
+                      onExit: (_) => setState(() => _hoveredProduct = null),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.blue.shade50
+                              : (index.isEven
+                                  ? Colors.white
+                                  : Colors.grey.shade50),
+                          border: Border(
+                            bottom: BorderSide(
+                                color: Colors.grey.shade300, width: 0.5),
+                            left: isSelected
+                                ? const BorderSide(color: Colors.blue, width: 3)
+                                : BorderSide.none,
+                          ),
                         ),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: mobile ? 6 : 8, vertical: 6),
+                        child: mobile
+                            ? _buildMobileCartRow(item, product, index)
+                            : _buildFullCartRow(item, product, index,
+                                compact: compact),
                       ),
-                      padding: EdgeInsets.symmetric(
-                          horizontal: mobile ? 6 : 8, vertical: 6),
-                      child: mobile
-                          ? _buildMobileCartRow(item, product, index)
-                          : _buildFullCartRow(item, product, index,
-                              compact: compact),
                     );
                   },
                 ),
         ),
       ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+//  STOCK INFO TAB  (shown at bottom on hover / focus)
+// ══════════════════════════════════════════════════════════════
+  Widget _buildStockInfoTab() {
+    final product = _stockPreviewProduct;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      height: product != null ? null : 0,
+      child: product == null
+          ? const SizedBox.shrink()
+          : _OnlyStock(product: product),
     );
   }
 
@@ -1943,12 +1949,16 @@ Map<String, double> _calculateBalances() {
           decoration: const BoxDecoration(
             color: Color(0xFFD3D3D3),
             borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(4), topRight: Radius.circular(4)),
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(4),
+            ),
           ),
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: const Center(
-            child: Text('Search Item (↑↓ Arrow Keys)',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            child: Text(
+              'Search Item (↑↓ Arrow Keys)',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
           ),
         ),
         Expanded(
@@ -1975,8 +1985,9 @@ Map<String, double> _calculateBalances() {
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 7),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade400)),
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade400),
+                    ),
                   ),
                 ),
               ),
@@ -1985,76 +1996,105 @@ Map<String, double> _calculateBalances() {
                 child: filtered.isEmpty
                     ? Center(
                         child: Text(
-                            searchQuery.isEmpty
-                                ? 'Start typing to search…'
-                                : 'No products found',
-                            style: const TextStyle(color: Colors.grey)))
+                          searchQuery.isEmpty
+                              ? 'Start typing to search…'
+                              : 'No products found',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final product = filtered[index];
                           final isSelected = index == selectedSearchIndex;
+
                           final tierCount = product.conversionTiers?.length ??
                               (product.hasUnitConversion ? 2 : 0);
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            color: isSelected
-                                ? Colors.blue.shade100
-                                : Colors.white,
-                            elevation: isSelected ? 3 : 1,
-                            child: ListTile(
-                              dense: true,
-                              leading: isSelected
-                                  ? const Icon(Icons.arrow_right,
-                                      color: Colors.blue)
-                                  : null,
-                              title: Row(children: [
-                                Expanded(
-                                    child: Text(product.itemName,
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: isSelected
-                                                ? FontWeight.bold
-                                                : FontWeight.normal))),
-                                if (product.hasUnitConversion)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(colors: [
-                                        Color(0xFF3B82F6),
-                                        Color(0xFF8B5CF6)
-                                      ]),
-                                      borderRadius: BorderRadius.circular(4),
+
+                          return MouseRegion(
+                            onEnter: (_) =>
+                                setState(() => _hoveredProduct = product),
+                            onExit: (_) =>
+                                setState(() => _hoveredProduct = null),
+                            child: Card(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              color: isSelected
+                                  ? Colors.blue.shade100
+                                  : Colors.white,
+                              elevation: isSelected ? 3 : 1,
+                              child: ListTile(
+                                dense: true,
+                                leading: isSelected
+                                    ? const Icon(
+                                        Icons.arrow_right,
+                                        color: Colors.blue,
+                                      )
+                                    : null,
+                                title: Row(children: [
+                                  Expanded(
+                                    child: Text(
+                                      product.itemName,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
                                     ),
-                                    child: Text('${tierCount + 1}T',
-                                        style: const TextStyle(
-                                            fontSize: 8,
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold)),
                                   ),
-                              ]),
-                              subtitle: Text(
-                                  '${product.issueUnit ?? '-'} • ${currencyFormat.format(product.retailPrice)} • Stk: ${product.stock}',
-                                  style: const TextStyle(fontSize: 10)),
-                              trailing: isSelected
-                                  ? Container(
+                                  if (product.hasUnitConversion)
+                                    Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 3),
+                                          horizontal: 4, vertical: 1),
                                       decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF3B82F6),
+                                            Color(0xFF8B5CF6),
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${tierCount + 1}T',
+                                        style: const TextStyle(
+                                          fontSize: 8,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ]),
+                                subtitle: Text(
+                                  '${product.issueUnit ?? '-'} • ${currencyFormat.format(product.retailPrice)} • Stk: ${product.stock}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                trailing: isSelected
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 3),
+                                        decoration: BoxDecoration(
                                           color: Colors.blue,
                                           borderRadius:
-                                              BorderRadius.circular(4)),
-                                      child: const Text('Enter ⏎',
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'Enter ⏎',
                                           style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9)))
-                                  : null,
-                              onTap: () {
-                                _addToCartAndFocusQty(product);
-                                if (mobile)
-                                  setState(() => _searchPanelExpanded = false);
-                              },
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                                onTap: () {
+                                  _addToCartAndFocusQty(product);
+                                  if (mobile) {
+                                    setState(
+                                        () => _searchPanelExpanded = false);
+                                  }
+                                },
+                              ),
                             ),
                           );
                         },
@@ -2352,59 +2392,17 @@ Map<String, double> _calculateBalances() {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  BOTTOM SECTION
+  //  BOTTOM SECTION  (no previous balance warning banner)
   // ══════════════════════════════════════════════════════════════
   Widget _buildBottomSection({bool compact = false, bool mobile = false}) {
     return Column(children: [
-      if (selectedCustomer != null && previousBalance > 0)
-        Container(
-          padding: const EdgeInsets.all(10),
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-                colors: [Colors.orange.shade50, Colors.red.shade50]),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.shade300),
-          ),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(8)),
-              child: Icon(Icons.account_balance_wallet,
-                  color: Colors.orange.shade700, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text('${selectedCustomer!.name} has previous balance',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          color: Colors.orange.shade800)),
-                  const SizedBox(height: 2),
-                  Text(
-                      'Prev: ${currencyFormat.format(previousBalance)} + Sale: ${currencyFormat.format(saleAmount)} = Due: ${currencyFormat.format(totalDue)}',
-                      style: TextStyle(
-                          fontSize: 10, color: Colors.orange.shade700)),
-                ])),
-            Text(currencyFormat.format(totalDue),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.red.shade700)),
-          ]),
-        ),
       if (mobile)
         _buildMobileTotalsGrid()
       else
         Row(children: [
           Expanded(
               child: _buildTotalField('Total Items',
-                  '${cart.length} items (${totalQuantity.toStringAsFixed(0)} qty)',
+                  '${cart.length} items ${totalQuantity.toStringAsFixed(0)} qty',
                   compact: compact)),
           SizedBox(width: compact ? 8 : 12),
           Expanded(
@@ -2414,10 +2412,17 @@ Map<String, double> _calculateBalances() {
           SizedBox(width: compact ? 8 : 12),
           Expanded(
               child: _buildTotalField(
-                  'Total Due', currencyFormat.format(totalDue),
-                  color: Colors.purple.shade100,
-                  borderColor: Colors.purple.shade400,
-                  textColor: Colors.purple.shade800,
+                  'Remaining Balance', currencyFormat.format(remainingBalance),
+                  isNegative: remainingBalance > 0,
+                  color: remainingBalance > 0
+                      ? Colors.red.shade50
+                      : Colors.green.shade50,
+                  borderColor: remainingBalance > 0
+                      ? Colors.red.shade300
+                      : Colors.green.shade300,
+                  textColor: remainingBalance > 0
+                      ? Colors.red.shade700
+                      : Colors.green.shade700,
                   compact: compact)),
         ]),
       SizedBox(height: compact ? 8 : 12),
@@ -2436,9 +2441,7 @@ Map<String, double> _calculateBalances() {
                           fontWeight: FontWeight.w500,
                           color: Colors.black87)),
                   const SizedBox(width: 8),
-                  _buildQuickAmountButton('Full', totalDue),
-                  const SizedBox(width: 4),
-                  _buildQuickAmountButton('Sale', saleAmount),
+                  _buildQuickAmountButton('Full', saleAmount),
                   const SizedBox(width: 4),
                   _buildQuickAmountButton('Clear', 0),
                 ]),
@@ -2471,23 +2474,6 @@ Map<String, double> _calculateBalances() {
                   ),
                 ),
               ])),
-          SizedBox(width: compact ? 8 : 12),
-          Expanded(
-              child: _buildTotalField(
-            'Remaining Balance',
-            currencyFormat.format(remainingBalance),
-            isNegative: remainingBalance > 0,
-            color: remainingBalance > 0
-                ? Colors.red.shade50
-                : Colors.green.shade50,
-            borderColor: remainingBalance > 0
-                ? Colors.red.shade300
-                : Colors.green.shade300,
-            textColor: remainingBalance > 0
-                ? Colors.red.shade700
-                : Colors.green.shade700,
-            compact: compact,
-          )),
         ]),
       SizedBox(height: compact ? 12 : 16),
       _buildActionButtonsRow(mobile: mobile, compact: compact),
@@ -2509,14 +2495,6 @@ Map<String, double> _calculateBalances() {
       ]),
       const SizedBox(height: 8),
       Row(children: [
-        Expanded(
-            child: _buildTotalField(
-                'Total Due', currencyFormat.format(totalDue),
-                color: Colors.purple.shade100,
-                borderColor: Colors.purple.shade400,
-                textColor: Colors.purple.shade800,
-                compact: true)),
-        const SizedBox(width: 8),
         Expanded(
             child: _buildTotalField(
                 'Remaining', currencyFormat.format(remainingBalance),
@@ -2542,9 +2520,7 @@ Map<String, double> _calculateBalances() {
         const Text('Amount Paid',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         const SizedBox(width: 8),
-        _buildQuickAmountButton('Full', totalDue),
-        const SizedBox(width: 4),
-        _buildQuickAmountButton('Sale', saleAmount),
+        _buildQuickAmountButton('Full', saleAmount),
         const SizedBox(width: 4),
         _buildQuickAmountButton('0', 0),
       ]),
@@ -2606,7 +2582,7 @@ Map<String, double> _calculateBalances() {
           _buildActionButton('FIND', _showFindInvoiceDialog,
               icon: Icons.search),
           _buildActionButton('PRINT', _showSlipPreview,
-              disabled: cart.isEmpty,
+              disabled: cart.isEmpty || !_isSaleCompleted,
               color: Colors.blue[700],
               icon: Icons.print),
           _buildActionButton(
@@ -2656,7 +2632,7 @@ Map<String, double> _calculateBalances() {
             icon: Icons.search, compact: compact),
         SizedBox(width: compact ? 8 : 12),
         _buildActionButton('PRINT', _showSlipPreview,
-            disabled: cart.isEmpty,
+            disabled: cart.isEmpty || !_isSaleCompleted,
             color: Colors.blue[700],
             icon: Icons.print,
             compact: compact),
@@ -2856,7 +2832,7 @@ Map<String, double> _calculateBalances() {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  SAVE / RESET
+  //  SAVE / RESET  (no customer balance update)
   // ══════════════════════════════════════════════════════════════
   Future<void> _performSaveAndNew() async {
     if (cart.isEmpty) return;
@@ -2889,7 +2865,6 @@ Map<String, double> _calculateBalances() {
       _setCurrentDate();
       selectedCustomer = null;
       customerNameController.text = 'Walk-in Customer';
-      customerBalanceController.text = '0.00';
       amountPaidController.clear();
       _isSaleCompleted = false;
       _isEditMode = false;
@@ -2899,26 +2874,10 @@ Map<String, double> _calculateBalances() {
       selectedCartIndex = -1;
       isNavigatingCart = false;
       _searchPanelExpanded = false;
-      _loadedPreviousBalance = null;
     });
     Future.microtask(() {
       if (mounted) searchFocusNode.requestFocus();
     });
-  }
-
-  void _syncSelectedCustomer() {
-    if (selectedCustomer == null) return;
-    try {
-      final updatedCustomer =
-          allCustomers.firstWhere((c) => c.id == selectedCustomer!.id);
-      setState(() {
-        selectedCustomer = updatedCustomer;
-        customerBalanceController.text =
-            updatedCustomer.openingBalance.toStringAsFixed(0);
-      });
-    } catch (e) {
-      debugPrint('Could not sync customer: $e');
-    }
   }
 
   Future<void> _saveSale({required bool updateExisting}) async {
@@ -2936,8 +2895,6 @@ Map<String, double> _calculateBalances() {
       'discount': balances['discount'],
       'tax': balances['tax'],
       'total': balances['saleAmount'],
-      'previousBalance': balances['previousBalance'],
-      'totalDue': balances['totalDue'],
       'amountPaid': balances['amountPaid'],
       'balance': balances['remainingBalance'],
       'paymentMethod': selectedPayment,
@@ -2947,12 +2904,6 @@ Map<String, double> _calculateBalances() {
       if (updateExisting && currentSaleId != null) {
         await DatabaseHelper.instance.updateSale(currentSaleId!, saleMap);
         await DatabaseHelper.instance.updateSaleItems(currentSaleId!, cart);
-        if (selectedCustomer?.id != null) {
-          await DatabaseHelper.instance.updateCustomerBalance(
-              selectedCustomer!.id!, balances['remainingBalance']!);
-          await _loadCustomers();
-          _syncSelectedCustomer();
-        }
         _snack(
             'Sale updated! Remaining: ${currencyFormat.format(balances['remainingBalance']!)}',
             Colors.green);
@@ -2960,15 +2911,9 @@ Map<String, double> _calculateBalances() {
         final saleId = await DatabaseHelper.instance.addSale(saleMap);
         currentSaleId = saleId;
         await DatabaseHelper.instance.addSaleItems(saleId, cart);
-        if (selectedCustomer?.id != null) {
-          await DatabaseHelper.instance.updateCustomerBalance(
-              selectedCustomer!.id!, balances['remainingBalance']!);
-          await _loadCustomers();
-          _syncSelectedCustomer();
-        }
         _snack(
           balances['remainingBalance']! > 0
-              ? 'Sale saved! Customer owes: ${currencyFormat.format(balances['remainingBalance']!)}'
+              ? 'Sale saved! Remaining: ${currencyFormat.format(balances['remainingBalance']!)}'
               : 'Sale saved! Fully paid.',
           Colors.green,
         );
@@ -3026,10 +2971,7 @@ Map<String, double> _calculateBalances() {
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0D47A1)),
-            child: const Text(
-              'Find',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text('Find', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -3074,17 +3016,13 @@ Map<String, double> _calculateBalances() {
             selectedCustomer =
                 allCustomers.firstWhere((c) => c.id == sale['customerId']);
             customerNameController.text = selectedCustomer?.name ?? '';
-            customerBalanceController.text =
-                (selectedCustomer?.openingBalance ?? 0).toStringAsFixed(0);
           } catch (_) {
             selectedCustomer = null;
             customerNameController.text = sale['customerName'] ?? 'Unknown';
-            customerBalanceController.text = '0.00';
           }
         } else {
           selectedCustomer = null;
           customerNameController.text = 'Walk-in Customer';
-          customerBalanceController.text = '0.00';
         }
 
         for (var item in saleItems) {
@@ -3113,8 +3051,6 @@ Map<String, double> _calculateBalances() {
         }
 
         amountPaidController.text = (sale['amountPaid'] ?? 0).toString();
-        _loadedPreviousBalance =
-            (sale['previousBalance'] as num?)?.toDouble() ?? 0.0;
         _isSaleCompleted = true;
         _isEditMode = false;
         selectedCartIndex = -1;
@@ -3138,7 +3074,6 @@ Map<String, double> _calculateBalances() {
     invoiceController.dispose();
     dateController.dispose();
     customerNameController.dispose();
-    customerBalanceController.dispose();
     searchController.dispose();
     amountPaidController.removeListener(_onAmountPaidChanged);
     amountPaidController.dispose();
@@ -3154,6 +3089,36 @@ Map<String, double> _calculateBalances() {
     for (var n in disFocusNodes.values) n.dispose();
     for (var n in unitFocusNodes.values) n.dispose();
     super.dispose();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STOCK INFO TAB WIDGET
+// ══════════════════════════════════════════════════════════════
+class _OnlyStock extends StatelessWidget {
+  final Product product;
+
+  const _OnlyStock({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = product.stock ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Colors.black12, width: 1),
+        ),
+      ),
+      child: Text(
+        'Stock: $stock',
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 }
 
@@ -3336,26 +3301,22 @@ class _CustomerDropdownDialogState extends State<_CustomerDropdownDialog> {
                 return _CustomerRow(
                   name: 'Walk-in Customer',
                   subtitle: 'No account needed',
-                  balance: null,
                   isHighlighted: isHighlighted,
                   isSelected: widget.selectedCustomer == null,
                   icon: Icons.directions_walk,
                   iconColor: Colors.green,
                   onTap: () => widget.onSelected(null),
-                  currencyFormat: widget.currencyFormat,
                 );
               }
               final c = customers[index - 1];
               return _CustomerRow(
                 name: c.name,
                 subtitle: c.phone ?? '',
-                balance: c.openingBalance,
                 isHighlighted: isHighlighted,
                 isSelected: widget.selectedCustomer?.id == c.id,
                 icon: Icons.person,
                 iconColor: Colors.blue,
                 onTap: () => widget.onSelected(c),
-                currencyFormat: widget.currencyFormat,
               );
             },
           ),
@@ -3367,23 +3328,19 @@ class _CustomerDropdownDialogState extends State<_CustomerDropdownDialog> {
 
 class _CustomerRow extends StatelessWidget {
   final String name, subtitle;
-  final double? balance;
   final bool isHighlighted, isSelected;
   final IconData icon;
   final Color iconColor;
   final VoidCallback onTap;
-  final NumberFormat currencyFormat;
 
   const _CustomerRow({
     required this.name,
     required this.subtitle,
-    required this.balance,
     required this.isHighlighted,
     required this.isSelected,
     required this.icon,
     required this.iconColor,
     required this.onTap,
-    required this.currencyFormat,
   });
 
   @override
@@ -3434,20 +3391,6 @@ class _CustomerRow extends StatelessWidget {
                       style:
                           TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               ])),
-          if (balance != null && balance! > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Text(currencyFormat.format(balance),
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.red.shade700,
-                      fontWeight: FontWeight.w600)),
-            ),
           if (isSelected) ...[
             const SizedBox(width: 8),
             Icon(Icons.check_circle, color: iconColor, size: 18),

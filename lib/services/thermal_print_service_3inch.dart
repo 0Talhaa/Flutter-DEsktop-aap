@@ -2,9 +2,6 @@ import 'dart:typed_data';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
-/// ============================================================
-/// MODEL: One line item on the receipt
-/// ============================================================
 class ReceiptItem {
   final int qty;
   final String productName;
@@ -23,43 +20,22 @@ class ReceiptItem {
   });
 }
 
-/// ============================================================
-/// SERVICE: 3-inch (58mm) Thermal Printer
-/// Paper width  : 58 mm
-/// Char columns : 32 (normal font)
-/// ============================================================
-class ThermalPrintService3Inch {
-  // ── Paper constants ───────────────────────────────────────
-  static const int _cols = 32;
-
-  // ── Currency formatters ───────────────────────────────────
-  static final _fmt    = NumberFormat('#,##0.00');
+class ThermalPrintService80mm {
+  static final _fmt = NumberFormat('#,##0.00');
   static final _fmtInt = NumberFormat('#,##0');
 
-  // ── DEBUG FLAG ────────────────────────────────────────────
-  static bool enableDebugLogging = true;
+  // 80mm thermal printer = 48 chars per line at normal font size
+  static const int _W = 48;
 
-  static void _log(String message) {
-    if (enableDebugLogging) {
-      print('[ThermalPrint] $message');
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────
-  /// Generate ESC/POS bytes for a 3-inch thermal slip.
-  // ─────────────────────────────────────────────────────────
   static Future<Uint8List> buildReceipt({
     required String shopName,
     required String shopAddress,
     required String shopPhone,
     String? shopTagline,
-
     required String invoiceNumber,
     required String date,
     required String customerName,
-
     required List<ReceiptItem> items,
-
     required double subtotal,
     required double totalDiscount,
     required double tax,
@@ -68,268 +44,269 @@ class ThermalPrintService3Inch {
     required double totalDue,
     required double amountPaid,
     required double remainingBalance,
-
     String paymentMethod = 'Cash',
   }) async {
-    try {
-      _log('Starting receipt generation...');
-      _log('Shop: $shopName');
-      _log('Invoice: $invoiceNumber');
-      _log('Items count: ${items.length}');
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile); // ← mm80
+    List<int> bytes = [];
 
-      final profile   = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm58, profile);
-      List<int> bytes = [];
+    bytes += generator.reset();
 
-      // ── INIT ──────────────────────────────────────────────
-      bytes += generator.reset();
-
-      // ── SHOP HEADER ───────────────────────────────────────
-      bytes += generator.text(
-        shopName,
-        styles: const PosStyles(align: PosAlign.center, bold: true),
-      );
-
-      if (shopAddress.isNotEmpty) {
-        bytes += generator.text(
-          shopAddress,
-          styles: const PosStyles(align: PosAlign.center),
-        );
-      }
-
-      if (shopPhone.isNotEmpty) {
-        bytes += generator.text(
-          'Tel: $shopPhone',
-          styles: const PosStyles(align: PosAlign.center),
-        );
-      }
-
-      bytes += generator.hr(ch: '-', len: _cols);
-
-      // ── INVOICE META ──────────────────────────────────────
-      bytes += generator.row([
-        PosColumn(
-          text: 'Invoice#',
-          width: 7,
-          styles: const PosStyles(),
-        ),
-        PosColumn(
-          text: _truncate(invoiceNumber, 12),
-          width: 5,
-          styles: const PosStyles(align: PosAlign.right),
-        ),
-      ]);
-
-      bytes += generator.row([
-        PosColumn(
-          text: 'Customer',
-          width: 5,
-          styles: const PosStyles(),
-        ),
-        PosColumn(
-          text: _truncate(customerName, 18),
-          width: 7,
-          styles: const PosStyles(align: PosAlign.right),
-        ),
-      ]);
-
-      bytes += generator.row([
-        PosColumn(
-          text: 'Date',
-          width: 5,
-          styles: const PosStyles(),
-        ),
-        PosColumn(
-          text: date,
-          width: 7,
-          styles: const PosStyles(align: PosAlign.right),
-        ),
-      ]);
-
-      bytes += generator.hr(ch: '-', len: _cols);
-
-      // ── COLUMN HEADER ─────────────────────────────────────
-      bytes += generator.text(
-        '${_padL('Q',  3)}'
-        '${_padL('PRODUCT', 11)}'
-        '${_padR('TP',  5)}'
-        '${_padR('RP',  5)}'
-        '${_padR('DIS', 4)}'
-        '${_padR('TOT', 4)}',
-        styles: const PosStyles(bold: true),
-      );
-
-      bytes += generator.hr(ch: '-', len: _cols);
-
-      // ── ITEMS ─────────────────────────────────────────────
-      for (final item in items) {
-        final nameLines = _wrapText(item.productName, 11);
-
-        // First line — all columns
-        bytes += generator.text(
-          '${_padL('${item.qty}',           3)}'
-          '${_padL(nameLines[0],           11)}'
-          '${_padR('${item.tradePrice.toInt()}',  5)}'
-          '${_padR('${item.retailPrice.toInt()}', 5)}'
-          '${_padR('${item.discountPercent.toInt()}%', 4)}'
-          '${_padR(_fmtInt.format(item.lineTotal), 4)}',
-        );
-
-        // Overflow product-name lines
-        for (int i = 1; i < nameLines.length; i++) {
-          bytes += generator.text(
-            '   ${_padL(nameLines[i], 11)}',
-          );
-        }
-      }
-
-      bytes += generator.hr(ch: '-', len: _cols);
-
-      // ── TOTALS ────────────────────────────────────────────
-      bytes += _totalRow(generator, 'Subtotal', _fmt.format(subtotal));
-
-      if (totalDiscount > 0) {
-        bytes += _totalRow(generator, 'Discount', '-${_fmt.format(totalDiscount)}');
-      }
-      if (tax > 0) {
-        bytes += _totalRow(generator, 'Tax', '+${_fmt.format(tax)}');
-      }
-
-      bytes += generator.hr(ch: '=', len: _cols);
-
-      bytes += _totalRow(generator, 'SALE TOTAL', _fmt.format(saleAmount), bold: true);
-
-      bytes += generator.hr(ch: '-', len: _cols);
-
-      if (previousBalance > 0) {
-        bytes += _totalRow(generator, 'Prev Bal.', _fmt.format(previousBalance));
-        bytes += _totalRow(generator, 'Total Due', _fmt.format(totalDue), bold: true);
-        bytes += generator.hr(ch: '-', len: _cols);
-      }
-
-      bytes += _totalRow(
-        generator,
-        'Paid ($paymentMethod)',
-        _fmt.format(amountPaid),
+    // ══════════════════════════════════════════════════
+    //  HEADER
+    // ══════════════════════════════════════════════════
+    bytes += generator.text(
+      shopName.toUpperCase(),
+      styles: const PosStyles(
+        align: PosAlign.center,
         bold: true,
-      );
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ),
+    );
 
-      bytes += generator.hr(ch: '=', len: _cols);
+    bytes += generator.feed(1);
 
-      if (remainingBalance > 0) {
-        bytes += _totalRow(
-          generator,
-          'BALANCE DUE',
-          _fmt.format(remainingBalance),
-          bold: true,
-          invert: true,
-        );
-      } else if (remainingBalance < 0) {
-        bytes += _totalRow(
-          generator,
-          'Change',
-          _fmt.format(remainingBalance.abs()),
-          bold: true,
-        );
-      } else {
-        bytes += generator.text(
-          '*** FULLY PAID ***',
-          styles: const PosStyles(align: PosAlign.center, bold: true),
-        );
-      }
+    bytes += generator.text(
+      shopAddress,
+      styles: const PosStyles(align: PosAlign.center),
+    );
 
-      bytes += generator.hr(ch: '=', len: _cols);
+    bytes += generator.text(
+      'Tel: $shopPhone',
+      styles: const PosStyles(align: PosAlign.center),
+    );
 
-      // ── ITEMS COUNT ───────────────────────────────────────
-      final totalQty = items.fold<int>(0, (s, i) => s + i.qty);
+    if (shopTagline != null && shopTagline.isNotEmpty) {
       bytes += generator.text(
-        'Items: ${items.length}  |  Qty: $totalQty',
+        shopTagline,
         styles: const PosStyles(align: PosAlign.center),
       );
+    }
 
-      bytes += generator.emptyLines(1);
+    bytes += generator.text(_line('='));
 
-      // ── TAGLINE / FOOTER ──────────────────────────────────
-      if (shopTagline != null && shopTagline.isNotEmpty) {
-        bytes += generator.text(
-          shopTagline,
-          styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB),
-        );
+    // ══════════════════════════════════════════════════
+    //  INVOICE INFO
+    // ══════════════════════════════════════════════════
+    bytes += generator.text(_labelValue('Invoice#:', invoiceNumber));
+    bytes += generator.text(_labelValue('Date:', date));
+    bytes += generator.text(_labelValue('Customer:', customerName));
+    bytes += generator.text(_labelValue('Payment:', paymentMethod));
+
+    bytes += generator.text(_line('='));
+
+    // ══════════════════════════════════════════════════
+    //  TABLE HEADER
+    //
+    //  Column layout (total = 48):
+    //  QTY(4) | PRODUCT(20) | PRICE(8) | DISC(6) | TOTAL(10)
+    //   4     +     20      +    8     +    6    +    10   = 48
+    // ══════════════════════════════════════════════════
+    bytes += generator.text(
+      _tableHeader(),
+      styles: const PosStyles(bold: true),
+    );
+    bytes += generator.text(_line('-'));
+
+    // ══════════════════════════════════════════════════
+    //  TABLE ROWS
+    // ══════════════════════════════════════════════════
+    for (final item in items) {
+      final lines = _tableRow(item);
+      for (final line in lines) {
+        bytes += generator.text(line);
       }
+    }
 
+    bytes += generator.text(_line('='));
+
+    // ══════════════════════════════════════════════════
+    //  TOTALS SECTION
+    // ══════════════════════════════════════════════════
+    bytes += generator.text(
+      _labelValue('Subtotal:', _fmt.format(subtotal)),
+    );
+
+    if (totalDiscount > 0) {
       bytes += generator.text(
-        'Thank you for your purchase!',
-        styles: const PosStyles(align: PosAlign.center, bold: true),
+        _labelValue('Discount:', '-${_fmt.format(totalDiscount)}'),
       );
-
-      bytes += generator.feed(4);
-      bytes += generator.cut();
-
-      _log('Receipt generation complete! Total bytes: ${bytes.length}');
-
-      return Uint8List.fromList(bytes);
-
-    } catch (e, stackTrace) {
-      _log('ERROR during receipt generation: $e');
-      _log('Stack trace: $stackTrace');
-      rethrow;
     }
+
+    if (tax > 0) {
+      bytes += generator.text(
+        _labelValue('Tax (${tax.toStringAsFixed(0)}%):', '+${_fmt.format(tax)}'),
+      );
+    }
+
+    bytes += generator.text(_line('='));
+
+    bytes += generator.text(
+      _labelValue('SALE TOTAL:', _fmt.format(saleAmount)),
+      styles: const PosStyles(bold: true),
+    );
+
+    bytes += generator.text(_line('='));
+
+    // ══════════════════════════════════════════════════
+    //  PREVIOUS BALANCE
+    // ══════════════════════════════════════════════════
+    if (previousBalance > 0) {
+      bytes += generator.text(
+        _labelValue('Previous Balance:', _fmt.format(previousBalance)),
+      );
+      bytes += generator.text(
+        _labelValue('Total Due:', _fmt.format(totalDue)),
+        styles: const PosStyles(bold: true),
+      );
+      bytes += generator.text(_line('-'));
+    }
+
+    // ══════════════════════════════════════════════════
+    //  PAYMENT
+    // ══════════════════════════════════════════════════
+    bytes += generator.text(
+      _labelValue('Amount Paid ($paymentMethod):', _fmt.format(amountPaid)),
+    );
+
+    bytes += generator.text(_line('='));
+
+    // ══════════════════════════════════════════════════
+    //  BALANCE STATUS
+    // ══════════════════════════════════════════════════
+    if (remainingBalance > 0) {
+      bytes += generator.text(
+        _center('*** BALANCE DUE: ${_fmt.format(remainingBalance)} ***'),
+        styles: const PosStyles(bold: true, reverse: true),
+      );
+    } else if (remainingBalance < 0) {
+      bytes += generator.text(
+        _labelValue('Change:', _fmt.format(remainingBalance.abs())),
+        styles: const PosStyles(bold: true),
+      );
+    } else {
+      bytes += generator.text(
+        _center('*** FULLY PAID ***'),
+        styles: const PosStyles(bold: true, reverse: true),
+      );
+    }
+
+    bytes += generator.text(_line('='));
+
+    // ══════════════════════════════════════════════════
+    //  FOOTER
+    // ══════════════════════════════════════════════════
+    final totalQty = items.fold<int>(0, (s, i) => s + i.qty);
+
+    bytes += generator.text(
+      _center('Total Items: ${items.length}   Total Qty: $totalQty'),
+    );
+
+    bytes += generator.text(_line('-'));
+
+    bytes += generator.text(
+      _center('Thank you for your purchase!'),
+      styles: const PosStyles(bold: true),
+    );
+
+    bytes += generator.text(
+      _center('Please visit us again!'),
+    );
+
+    bytes += generator.feed(4);
+    bytes += generator.cut();
+
+    return Uint8List.fromList(bytes);
   }
 
-  // ── Private helpers ───────────────────────────────────────
+  // ────────────────────────────────────────────────────────────
+  //  HELPERS — every method produces exactly _W (48) characters
+  // ────────────────────────────────────────────────────────────
 
-  static String _padL(String s, int width) {
-    if (s.length >= width) return s.substring(0, width);
-    return s.padRight(width);
+  /// Full separator line
+  /// "================================================"
+  static String _line([String ch = '-']) => ch * _W;
+
+  /// Center a string within 48 chars
+  static String _center(String text) {
+    if (text.length >= _W) return text.substring(0, _W);
+    final pad = (_W - text.length) ~/ 2;
+    return text.padLeft(text.length + pad).padRight(_W);
   }
 
-  static String _padR(String s, int width) {
-    if (s.length >= width) return s.substring(0, width);
-    return s.padLeft(width);
+  /// Left label + right value = exactly 48 chars
+  /// "Customer:                            John Doe"
+  static String _labelValue(String label, String value) {
+    if (label.length + value.length >= _W) {
+      final maxLabel = _W - value.length - 1;
+      label = label.substring(0, maxLabel.clamp(0, label.length));
+    }
+    final spaces = _W - label.length - value.length;
+    return '$label${' ' * spaces}$value';
   }
 
-  static List<int> _totalRow(
-    Generator gen,
-    String label,
-    String value, {
-    bool bold   = false,
-    bool invert = false,
-  }) {
-    final safeLabel = _truncate(label, 17);
-    final safeValue = _truncate(value, 13);
+  /// Table header — must match _tableRow() column widths exactly
+  ///
+  ///  QTY(4) PRODUCT(20) PRICE(8) DISC(6) TOTAL(10) = 48
+  static String _tableHeader() {
+    const int qtyW = 4;
+    const int prodW = 20;
+    const int priceW = 8;
+    const int discW = 6;
+    const int totalW = 10;
+    // 4 + 20 + 8 + 6 + 10 = 48 ✓
 
-    return gen.row([
-      PosColumn(
-        text: safeLabel,
-        width: 7,
-        styles: PosStyles(bold: bold, reverse: invert),
-      ),
-      PosColumn(
-        text: safeValue,
-        width: 5,
-        styles: PosStyles(bold: bold, align: PosAlign.right, reverse: invert),
-      ),
-    ]);
+    final qty = 'QTY'.padRight(qtyW);
+    final product = 'PRODUCT'.padRight(prodW);
+    final price = 'PRICE'.padLeft(priceW);
+    final disc = 'DISC'.padLeft(discW);
+    final total = 'TOTAL'.padLeft(totalW);
+
+    return '$qty$product$price$disc$total';
   }
 
-  static List<String> _wrapText(String text, int maxWidth) {
-    if (text.length <= maxWidth) return [text];
-    final lines  = <String>[];
-    final words  = text.split(' ');
-    var   current = '';
-    for (final word in words) {
-      final candidate = current.isEmpty ? word : '$current $word';
-      if (candidate.length <= maxWidth) {
-        current = candidate;
-      } else {
-        if (current.isNotEmpty) lines.add(current);
-        current = word.length > maxWidth ? word.substring(0, maxWidth) : word;
+  /// Table row — wraps product name if longer than prodW
+  ///
+  ///  QTY(4) PRODUCT(20) PRICE(8) DISC(6) TOTAL(10) = 48
+  static List<String> _tableRow(ReceiptItem item) {
+    const int qtyW = 4;
+    const int prodW = 20;
+    const int priceW = 8;
+    const int discW = 6;
+    const int totalW = 10;
+
+    final String qtyStr = item.qty.toString().padRight(qtyW);
+    final String priceStr = _fmtInt.format(item.retailPrice).padLeft(priceW);
+    final String discStr = item.discountPercent > 0
+        ? '${item.discountPercent.toStringAsFixed(0)}%'.padLeft(discW)
+        : '-'.padLeft(discW);
+    final String totalStr = _fmtInt.format(item.lineTotal).padLeft(totalW);
+
+    final List<String> rows = [];
+    final String fullName = item.productName;
+
+    // First line with price, disc, total
+    final String firstName = fullName.length > prodW
+        ? fullName.substring(0, prodW)
+        : fullName.padRight(prodW);
+
+    rows.add('$qtyStr$firstName$priceStr$discStr$totalStr');
+
+    // Overflow lines for long product names
+    if (fullName.length > prodW) {
+      String remaining = fullName.substring(prodW);
+      while (remaining.isNotEmpty) {
+        final chunk = remaining.length > prodW
+            ? remaining.substring(0, prodW)
+            : remaining.padRight(prodW);
+        rows.add(' ' * qtyW + chunk);
+        remaining = remaining.length > prodW
+            ? remaining.substring(prodW)
+            : '';
       }
     }
-    if (current.isNotEmpty) lines.add(current);
-    return lines.isEmpty ? [''] : lines;
-  }
 
-  static String _truncate(String s, int max) =>
-      s.length > max ? '${s.substring(0, max - 1)}…' : s;
+    return rows;
+  }
 }

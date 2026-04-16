@@ -16,7 +16,7 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
   List<Brand> filteredBrands = [];
   bool isLoading = true;
   String searchQuery = '';
-  
+
   final TextEditingController searchController = TextEditingController();
 
   @override
@@ -28,7 +28,8 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
   Future<void> _loadBrands() async {
     setState(() => isLoading = true);
     try {
-      final result = await DatabaseHelper.instance.getAllBrands(activeOnly: false);
+      final result =
+          await DatabaseHelper.instance.getAllBrands(activeOnly: false);
       setState(() {
         brands = result;
         filteredBrands = result;
@@ -125,14 +126,16 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                         ),
                         const Spacer(),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: const Color(0xFF10B981),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '${filteredBrands.length} items',
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
                           ),
                         ),
                       ],
@@ -183,13 +186,15 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                                       searchQuery.isEmpty
                                           ? 'No brands found'
                                           : 'No results for "$searchQuery"',
-                                      style: TextStyle(color: Colors.grey.shade600),
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600),
                                     ),
                                   ],
                                 ),
                               )
                             : ListView.builder(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 itemCount: filteredBrands.length,
                                 itemBuilder: (context, index) {
                                   final brand = filteredBrands[index];
@@ -200,7 +205,8 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      side: BorderSide(color: Colors.grey.shade200),
+                                      side: BorderSide(
+                                          color: Colors.grey.shade200),
                                     ),
                                     child: ListTile(
                                       leading: Container(
@@ -208,9 +214,11 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                                         height: 40,
                                         decoration: BoxDecoration(
                                           color: isActive
-                                              ? const Color(0xFF10B981).withOpacity(0.1)
+                                              ? const Color(0xFF10B981)
+                                                  .withOpacity(0.1)
                                               : Colors.grey.shade200,
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: Icon(
                                           Icons.business,
@@ -224,14 +232,20 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                                         brand.name,
                                         style: TextStyle(
                                           fontWeight: FontWeight.w600,
-                                          color: isActive ? const Color(0xFF1E293B) : Colors.grey,
-                                          decoration: isActive ? null : TextDecoration.lineThrough,
+                                          color: isActive
+                                              ? const Color(0xFF1E293B)
+                                              : Colors.grey,
+                                          decoration: isActive
+                                              ? null
+                                              : TextDecoration.lineThrough,
                                         ),
                                       ),
                                       subtitle: brand.contactPerson != null
                                           ? Text(
                                               brand.contactPerson!,
-                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600),
                                             )
                                           : null,
                                       trailing: Row(
@@ -239,29 +253,43 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                                         children: [
                                           if (!isActive)
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
                                               decoration: BoxDecoration(
                                                 color: Colors.red.shade50,
-                                                borderRadius: BorderRadius.circular(4),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
                                               ),
                                               child: Text(
                                                 'Inactive',
-                                                style: TextStyle(fontSize: 10, color: Colors.red.shade700),
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.red.shade700),
                                               ),
                                             ),
                                           const SizedBox(width: 8),
                                           IconButton(
-                                            icon: const Icon(Icons.edit_outlined, size: 20),
+                                            icon: const Icon(
+                                                Icons.edit_outlined,
+                                                size: 20),
                                             color: Colors.blue,
-                                            onPressed: () => _showEditDialog(brand),
+                                            onPressed: () =>
+                                                _showEditDialog(brand),
                                           ),
                                           IconButton(
                                             icon: Icon(
-                                              isActive ? Icons.delete_outline : Icons.restore,
+                                              isActive
+                                                  ? Icons.delete_outline
+                                                  : Icons.restore,
                                               size: 20,
                                             ),
-                                            color: isActive ? Colors.red : Colors.green,
-                                            onPressed: () => _toggleStatus(brand),
+                                            color: isActive
+                                                ? Colors.red
+                                                : Colors.green,
+                                            onPressed: () =>
+                                                _toggleStatus(brand),
                                           ),
                                         ],
                                       ),
@@ -289,7 +317,8 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
   void _showEditDialog(Brand brand) {
     final nameController = TextEditingController(text: brand.name);
     final descController = TextEditingController(text: brand.description ?? '');
-    final contactController = TextEditingController(text: brand.contactPerson ?? '');
+    final contactController =
+        TextEditingController(text: brand.contactPerson ?? '');
     final phoneController = TextEditingController(text: brand.phone ?? '');
     final emailController = TextEditingController(text: brand.email ?? '');
 
@@ -318,12 +347,15 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Brand Name *', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                      labelText: 'Brand Name *', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: contactController,
-                  decoration: const InputDecoration(labelText: 'Contact Person', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Person',
+                      border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -331,14 +363,16 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                     Expanded(
                       child: TextField(
                         controller: phoneController,
-                        decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(
+                            labelText: 'Phone', border: OutlineInputBorder()),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: emailController,
-                        decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(
+                            labelText: 'Email', border: OutlineInputBorder()),
                       ),
                     ),
                   ],
@@ -347,14 +381,17 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
                 TextField(
                   controller: descController,
                   maxLines: 2,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                      labelText: 'Description', border: OutlineInputBorder()),
                 ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (nameController.text.trim().isEmpty) {
@@ -373,7 +410,8 @@ class _BrandManagementScreenState extends State<BrandManagementScreen> {
               _loadBrands();
               _showSuccess('Brand updated successfully');
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981)),
             child: const Text('Save'),
           ),
         ],
@@ -436,7 +474,9 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
       _clearForm();
       widget.onSaved();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Brand added successfully!'), backgroundColor: Colors.green),
+        const SnackBar(
+            content: Text('Brand added successfully!'),
+            backgroundColor: Colors.green),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -462,25 +502,35 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+        ],
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+              gradient: LinearGradient(
+                  colors: [Color(0xFF10B981), Color(0xFF059669)]),
+              borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12), topRight: Radius.circular(12)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8)),
                   child: const Icon(Icons.add, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
-                const Text('Add New Brand', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                const Text('Add New Brand',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
               ],
             ),
           ),
@@ -496,7 +546,8 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: nameController,
-                      decoration: _inputDecoration('Enter brand name', Icons.business),
+                      decoration:
+                          _inputDecoration('Enter brand name', Icons.business),
                       validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
@@ -504,7 +555,8 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: contactController,
-                      decoration: _inputDecoration('Enter contact person', Icons.person),
+                      decoration: _inputDecoration(
+                          'Enter contact person', Icons.person),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -517,7 +569,8 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: phoneController,
-                                decoration: _inputDecoration('Phone', Icons.phone),
+                                decoration:
+                                    _inputDecoration('Phone', Icons.phone),
                               ),
                             ],
                           ),
@@ -531,7 +584,8 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: emailController,
-                                decoration: _inputDecoration('Email', Icons.email),
+                                decoration:
+                                    _inputDecoration('Email', Icons.email),
                               ),
                             ],
                           ),
@@ -544,7 +598,8 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                     TextFormField(
                       controller: addressController,
                       maxLines: 2,
-                      decoration: _inputDecoration('Enter address', Icons.location_on),
+                      decoration:
+                          _inputDecoration('Enter address', Icons.location_on),
                     ),
                     const SizedBox(height: 16),
                     _buildLabel('Description'),
@@ -558,16 +613,26 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(onPressed: _clearForm, child: const Text('Clear')),
+                          child: OutlinedButton(
+                              onPressed: _clearForm,
+                              child: const Text('Clear')),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 2,
                           child: ElevatedButton.icon(
                             onPressed: isSaving ? null : _saveBrand,
-                            icon: isSaving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save),
+                            icon: isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.save),
                             label: Text(isSaving ? 'Saving...' : 'Save Brand'),
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white),
                           ),
                         ),
                       ],
@@ -583,7 +648,11 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
   }
 
   Widget _buildLabel(String text) {
-    return Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569)));
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569)));
   }
 
   InputDecoration _inputDecoration(String hint, IconData? icon) {
@@ -592,9 +661,15 @@ class _AddBrandPanelState extends State<_AddBrandPanel> {
       prefixIcon: icon != null ? Icon(icon, size: 20) : null,
       filled: true,
       fillColor: Colors.grey.shade50,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF10B981), width: 2)),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF10B981), width: 2)),
     );
   }
 

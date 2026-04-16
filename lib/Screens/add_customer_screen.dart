@@ -29,7 +29,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   late TextEditingController _notesController;
 
   String? _selectedCustomerType;
-  
+
   final List<String> customerTypes = [
     'Regular',
     'Wholesale',
@@ -60,13 +60,16 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.customer?.name ?? '');
-    _phoneController = TextEditingController(text: widget.customer?.phone ?? '');
+    _phoneController =
+        TextEditingController(text: widget.customer?.phone ?? '');
     _balanceController = TextEditingController(
       text: widget.customer?.openingBalance.toStringAsFixed(0) ?? '0',
     );
-    _addressController = TextEditingController(text: widget.customer?.address ?? '');
+    _addressController =
+        TextEditingController(text: widget.customer?.address ?? '');
     _cityController = TextEditingController(text: widget.customer?.city ?? '');
-    _emailController = TextEditingController(text: widget.customer?.email ?? '');
+    _emailController =
+        TextEditingController(text: widget.customer?.email ?? '');
     _cnicController = TextEditingController(text: widget.customer?.cnic ?? '');
     _notesController = TextEditingController();
 
@@ -105,10 +108,18 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         openingBalance: double.tryParse(_balanceController.text) ?? 0.0,
-        address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
-        city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
-        email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
-        cnic: _cnicController.text.trim().isEmpty ? null : _cnicController.text.trim(),
+        address: _addressController.text.trim().isEmpty
+            ? null
+            : _addressController.text.trim(),
+        city: _cityController.text.trim().isEmpty
+            ? null
+            : _cityController.text.trim(),
+        email: _emailController.text.trim().isEmpty
+            ? null
+            : _emailController.text.trim(),
+        cnic: _cnicController.text.trim().isEmpty
+            ? null
+            : _cnicController.text.trim(),
       );
 
       if (isEditMode) {
@@ -151,12 +162,16 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                   color: const Color(0xFF10B981).withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 40),
+                child: const Icon(Icons.check_circle,
+                    color: Color(0xFF10B981), size: 40),
               ),
               const SizedBox(height: 16),
               Text(
                 isEditMode ? 'Customer Updated!' : 'Customer Added!',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B)),
               ),
               const SizedBox(height: 8),
               Text(
@@ -169,15 +184,21 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const PremiumDashboardScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    const PremiumDashboardScreen()));
                         // Navigator.pop(context, true);
                       },
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                         side: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
-                      child: const Text('Done', style: TextStyle(color: Color(0xFF64748B))),
+                      child: const Text('Done',
+                          style: TextStyle(color: Color(0xFF64748B))),
                     ),
                   ),
                   if (!isEditMode) ...[
@@ -191,10 +212,12 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF3B82F6),
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
                           elevation: 0,
                         ),
-                        child: const Text('Add Another', style: TextStyle(color: Colors.white)),
+                        child: const Text('Add Another',
+                            style: TextStyle(color: Colors.white)),
                       ),
                     ),
                   ],
@@ -252,7 +275,9 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                           hint: 'Enter full name',
                           icon: Icons.person_outline,
                           isRequired: true,
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null,
+                          validator: (v) => v == null || v.trim().isEmpty
+                              ? 'Name is required'
+                              : null,
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -270,7 +295,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                   if (value == null || value.trim().isEmpty) {
                                     return 'Phone is required';
                                   }
-                                  if (!RegExp(r'^[0-9]{11}$').hasMatch(value.trim())) {
+                                  if (!RegExp(r'^[0-9]{11}$')
+                                      .hasMatch(value.trim())) {
                                     return 'Enter valid 11-digit number';
                                   }
                                   return null;
@@ -309,7 +335,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                 hint: 'Select type',
                                 icon: Icons.category_outlined,
                                 items: customerTypes,
-                                onChanged: (v) => setState(() => _selectedCustomerType = v),
+                                onChanged: (v) =>
+                                    setState(() => _selectedCustomerType = v),
                               ),
                             ),
                           ],
@@ -352,7 +379,6 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                 
                     const SizedBox(height: 20),
 
                     // Notes Card
@@ -364,7 +390,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                         _buildTextField(
                           controller: _notesController,
                           label: 'Notes (Optional)',
-                          hint: 'Add any additional notes about this customer...',
+                          hint:
+                              'Add any additional notes about this customer...',
                           icon: Icons.edit_note_outlined,
                           maxLines: 3,
                         ),
@@ -544,7 +571,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
               ),
             ),
             if (isRequired)
-              const Text(' *', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+              const Text(' *',
+                  style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
           ],
         ),
         const SizedBox(height: 6),
@@ -565,13 +593,16 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
             prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade500),
             prefixText: prefix != null ? '$prefix ' : null,
-            prefixStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+            prefixStyle:
+                const TextStyle(color: Color(0xFF475569), fontSize: 13),
             suffixText: suffix,
-            suffixStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+            suffixStyle:
+                const TextStyle(color: Color(0xFF475569), fontSize: 13),
             counterText: '',
             filled: true,
             fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -582,7 +613,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+              borderSide:
+                  const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -624,13 +656,16 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           ),
           child: DropdownButtonFormField<String>(
             value: value,
-            hint: Text(hint, style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+            hint: Text(hint,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
             isExpanded: true,
-            icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500, size: 20),
+            icon: Icon(Icons.keyboard_arrow_down,
+                color: Colors.grey.shade500, size: 20),
             style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
             decoration: InputDecoration(
               prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade500),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: InputBorder.none,
             ),
             dropdownColor: Colors.white,
@@ -675,9 +710,12 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Enter or select city',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                    prefixIcon: Icon(Icons.location_city_outlined, size: 18, color: Colors.grey.shade500),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    hintStyle:
+                        TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    prefixIcon: Icon(Icons.location_city_outlined,
+                        size: 18, color: Colors.grey.shade500),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
                     border: InputBorder.none,
                   ),
                 ),
@@ -690,7 +728,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                 itemBuilder: (context) => cities
                     .map((city) => PopupMenuItem(
                           value: city,
-                          child: Text(city, style: const TextStyle(fontSize: 13)),
+                          child:
+                              Text(city, style: const TextStyle(fontSize: 13)),
                         ))
                     .toList(),
               ),
@@ -708,21 +747,20 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: hasBalance
-            ? const Color(0xFFFEF3C7)
-            : const Color(0xFFD1FAE5),
+        color: hasBalance ? const Color(0xFFFEF3C7) : const Color(0xFFD1FAE5),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: hasBalance
-              ? const Color(0xFFFCD34D)
-              : const Color(0xFF6EE7B7),
+          color: hasBalance ? const Color(0xFFFCD34D) : const Color(0xFF6EE7B7),
         ),
       ),
       child: Row(
         children: [
           Icon(
-            hasBalance ? Icons.warning_amber_rounded : Icons.check_circle_outline,
-            color: hasBalance ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+            hasBalance
+                ? Icons.warning_amber_rounded
+                : Icons.check_circle_outline,
+            color:
+                hasBalance ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -730,11 +768,15 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                hasBalance ? 'Customer has pending balance' : 'No pending balance',
+                hasBalance
+                    ? 'Customer has pending balance'
+                    : 'No pending balance',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: hasBalance ? const Color(0xFF92400E) : const Color(0xFF065F46),
+                  color: hasBalance
+                      ? const Color(0xFF92400E)
+                      : const Color(0xFF065F46),
                 ),
               ),
               if (hasBalance)
@@ -763,7 +805,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF64748B),
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
               side: const BorderSide(color: Color(0xFFE2E8F0)),
             ),
           ),
@@ -777,9 +820,14 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
                   )
-                : Icon(isEditMode ? Icons.save_outlined : Icons.person_add_outlined, size: 18),
+                : Icon(
+                    isEditMode
+                        ? Icons.save_outlined
+                        : Icons.person_add_outlined,
+                    size: 18),
             label: Text(_isSaving
                 ? 'Saving...'
                 : isEditMode
@@ -789,7 +837,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
               backgroundColor: const Color(0xFF8B5CF6),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
               elevation: 0,
             ),
           ),
@@ -799,13 +848,20 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   }
 
   Widget _buildPreviewCard() {
-    String name = _nameController.text.isEmpty ? 'Customer Name' : _nameController.text;
-    String phone = _phoneController.text.isEmpty ? '---' : _phoneController.text;
+    String name =
+        _nameController.text.isEmpty ? 'Customer Name' : _nameController.text;
+    String phone =
+        _phoneController.text.isEmpty ? '---' : _phoneController.text;
     String city = _cityController.text.isEmpty ? '---' : _cityController.text;
     double balance = double.tryParse(_balanceController.text) ?? 0;
 
     String initials = name.isNotEmpty
-        ? name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
+        ? name
+            .split(' ')
+            .map((e) => e.isNotEmpty ? e[0] : '')
+            .take(2)
+            .join()
+            .toUpperCase()
         : 'CN';
 
     return Container(
@@ -836,7 +892,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             ),
             child: Row(
               children: const [
-                Icon(Icons.preview_outlined, size: 18, color: Color(0xFF64748B)),
+                Icon(Icons.preview_outlined,
+                    size: 18, color: Color(0xFF64748B)),
                 SizedBox(width: 8),
                 Text(
                   'Customer Preview',
@@ -895,11 +952,13 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.phone_outlined, size: 14, color: Colors.grey.shade500),
+                    Icon(Icons.phone_outlined,
+                        size: 14, color: Colors.grey.shade500),
                     const SizedBox(width: 4),
                     Text(
                       phone,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -907,11 +966,13 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
+                    Icon(Icons.location_on_outlined,
+                        size: 14, color: Colors.grey.shade500),
                     const SizedBox(width: 4),
                     Text(
                       city,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -926,7 +987,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                       style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: balance > 0
                             ? const Color(0xFFFEF3C7)
@@ -1113,7 +1175,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF1E40AF), height: 1.4),
+              style: const TextStyle(
+                  fontSize: 11, color: Color(0xFF1E40AF), height: 1.4),
             ),
           ),
         ],

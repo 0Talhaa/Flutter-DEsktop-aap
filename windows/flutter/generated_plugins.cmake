@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  flutter_pos_printer_platform_image_3
+  print_bluetooth_thermal
   printing
   share_plus
   url_launcher_windows

@@ -14,10 +14,10 @@ import '../models/issue_unit.dart';
 // ============================================================
 class UnitConversionRow {
   final String id;
-  TextEditingController nameController;      // e.g. "Strip", "Box", "Carton"
-  TextEditingController quantityController;  // e.g. 10 (tablets per strip)
-  TextEditingController priceController;     // price for this unit
-  String containsUnit;                       // what the quantity refers to (previous tier)
+  TextEditingController nameController; // e.g. "Strip", "Box", "Carton"
+  TextEditingController quantityController; // e.g. 10 (tablets per strip)
+  TextEditingController priceController; // price for this unit
+  String containsUnit; // what the quantity refers to (previous tier)
 
   UnitConversionRow({
     required this.id,
@@ -64,7 +64,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final TextEditingController _descriptionController = TextEditingController();
 
   // Base unit price controller
-  final TextEditingController _pricePerBaseUnitController = TextEditingController();
+  final TextEditingController _pricePerBaseUnitController =
+      TextEditingController();
 
   String? _selectedCompany;
   String? _selectedCategory;
@@ -160,11 +161,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
       setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('❌ Error loading dropdown data: $e');
-      
+
       // Fallback to default values if database fails
       _loadDefaultDropdownValues();
       setState(() => _isLoading = false);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -299,91 +300,91 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   // ── Save ─────────────────────────────────────────────────────
 
-    Future<void> _saveItem() async {
-      if (!_formKey.currentState!.validate()) return;
-      setState(() => _isSaving = true);
+  Future<void> _saveItem() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
 
-      try {
-        // ✅ Build conversionTiers from the dynamic rows
-        List<Map<String, dynamic>>? tiers;
-        if (_enableUnitConversion && _conversionRows.isNotEmpty) {
-          tiers = [];
-          for (int i = 0; i < _conversionRows.length; i++) {
-            final row = _conversionRows[i];
-            final previousUnitName = i == 0
-                ? _selectedBaseUnit
-                : (_conversionRows[i - 1].nameController.text.isNotEmpty
-                    ? _conversionRows[i - 1].nameController.text
-                    : 'Unit');
-            tiers.add({
-              'name': row.nameController.text.isNotEmpty
-                  ? row.nameController.text
-                  : 'Tier ${i + 1}',
-              'quantity': int.tryParse(row.quantityController.text) ?? 1,
-              'price': double.tryParse(row.priceController.text) ?? 0.0,
-              'containsUnit': previousUnitName,
-            });
-          }
-        }
-
-        final newProduct = Product(
-          itemName: _itemNameController.text.trim(),
-          itemCode: _itemCodeController.text.trim(),
-          barcode: _barcodeController.text.trim().isNotEmpty
-              ? _barcodeController.text.trim()
-              : null,
-          category: _selectedCategory,
-          tradePrice: double.parse(_tradePriceController.text),
-          retailPrice: double.parse(_retailPriceController.text),
-          taxPercent: double.tryParse(_taxController.text) ?? 0.0,
-          discountPercent: double.tryParse(_discountController.text) ?? 0.0,
-          parLevel: int.tryParse(_parLevelController.text) ?? 0,
-          stock: 0,
-          issueUnit: _enableUnitConversion
+    try {
+      // ✅ Build conversionTiers from the dynamic rows
+      List<Map<String, dynamic>>? tiers;
+      if (_enableUnitConversion && _conversionRows.isNotEmpty) {
+        tiers = [];
+        for (int i = 0; i < _conversionRows.length; i++) {
+          final row = _conversionRows[i];
+          final previousUnitName = i == 0
               ? _selectedBaseUnit
-              : (_selectedIssueUnit ?? _issueUnitController.text.trim()),
-          companyName: _selectedCompany ?? 'Other',
-          description: _descriptionController.text.trim().isNotEmpty
-              ? _descriptionController.text.trim()
-              : null,
-          createdAt: DateTime.now().toIso8601String(),
-          // Unit conversion fields
-          hasUnitConversion: _enableUnitConversion,
-          baseUnit: _enableUnitConversion ? _selectedBaseUnit : null,
-          // ✅ Save ALL dynamic tiers as JSON
-          conversionTiers: tiers,
-          // Legacy fields (first 2 tiers for backward compat)
-          unitsPerStrip: (_enableUnitConversion && _conversionRows.isNotEmpty)
-              ? int.tryParse(_conversionRows[0].quantityController.text)
-              : null,
-          stripsPerBox: (_enableUnitConversion && _conversionRows.length >= 2)
-              ? int.tryParse(_conversionRows[1].quantityController.text)
-              : null,
-          pricePerUnit: _enableUnitConversion
-              ? double.tryParse(_pricePerBaseUnitController.text)
-              : null,
-          pricePerStrip: (_enableUnitConversion && _conversionRows.isNotEmpty)
-              ? double.tryParse(_conversionRows[0].priceController.text)
-              : null,
-          pricePerBox: (_enableUnitConversion && _conversionRows.length >= 2)
-              ? double.tryParse(_conversionRows[1].priceController.text)
-              : null,
-        );
-
-        await DatabaseHelper.instance.addProduct(newProduct);
-        if (mounted) _showSuccessDialog();
-      } catch (e) {
-        setState(() => _isSaving = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to save item: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+              : (_conversionRows[i - 1].nameController.text.isNotEmpty
+                  ? _conversionRows[i - 1].nameController.text
+                  : 'Unit');
+          tiers.add({
+            'name': row.nameController.text.isNotEmpty
+                ? row.nameController.text
+                : 'Tier ${i + 1}',
+            'quantity': int.tryParse(row.quantityController.text) ?? 1,
+            'price': double.tryParse(row.priceController.text) ?? 0.0,
+            'containsUnit': previousUnitName,
+          });
         }
       }
+
+      final newProduct = Product(
+        itemName: _itemNameController.text.trim(),
+        itemCode: _itemCodeController.text.trim(),
+        barcode: _barcodeController.text.trim().isNotEmpty
+            ? _barcodeController.text.trim()
+            : null,
+        category: _selectedCategory,
+        tradePrice: double.parse(_tradePriceController.text),
+        retailPrice: double.parse(_retailPriceController.text),
+        taxPercent: double.tryParse(_taxController.text) ?? 0.0,
+        discountPercent: double.tryParse(_discountController.text) ?? 0.0,
+        parLevel: int.tryParse(_parLevelController.text) ?? 0,
+        stock: 0,
+        issueUnit: _enableUnitConversion
+            ? _selectedBaseUnit
+            : (_selectedIssueUnit ?? _issueUnitController.text.trim()),
+        companyName: _selectedCompany ?? 'Other',
+        description: _descriptionController.text.trim().isNotEmpty
+            ? _descriptionController.text.trim()
+            : null,
+        createdAt: DateTime.now().toIso8601String(),
+        // Unit conversion fields
+        hasUnitConversion: _enableUnitConversion,
+        baseUnit: _enableUnitConversion ? _selectedBaseUnit : null,
+        // ✅ Save ALL dynamic tiers as JSON
+        conversionTiers: tiers,
+        // Legacy fields (first 2 tiers for backward compat)
+        unitsPerStrip: (_enableUnitConversion && _conversionRows.isNotEmpty)
+            ? int.tryParse(_conversionRows[0].quantityController.text)
+            : null,
+        stripsPerBox: (_enableUnitConversion && _conversionRows.length >= 2)
+            ? int.tryParse(_conversionRows[1].quantityController.text)
+            : null,
+        pricePerUnit: _enableUnitConversion
+            ? double.tryParse(_pricePerBaseUnitController.text)
+            : null,
+        pricePerStrip: (_enableUnitConversion && _conversionRows.isNotEmpty)
+            ? double.tryParse(_conversionRows[0].priceController.text)
+            : null,
+        pricePerBox: (_enableUnitConversion && _conversionRows.length >= 2)
+            ? double.tryParse(_conversionRows[1].priceController.text)
+            : null,
+      );
+
+      await DatabaseHelper.instance.addProduct(newProduct);
+      if (mounted) _showSuccessDialog();
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save item: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+  }
 
   void _showSuccessDialog() {
     showDialog(
@@ -409,9 +410,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               const Text(
                 'Item Added Successfully!',
                 style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: _slate),
+                    fontSize: 18, fontWeight: FontWeight.w600, color: _slate),
               ),
               const SizedBox(height: 8),
               Text(_itemNameController.text,
@@ -453,8 +452,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                             borderRadius: BorderRadius.circular(8)),
                         side: const BorderSide(color: _border),
                       ),
-                      child: const Text('Done',
-                          style: TextStyle(color: _muted)),
+                      child:
+                          const Text('Done', style: TextStyle(color: _muted)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -471,7 +470,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                             borderRadius: BorderRadius.circular(8)),
                         elevation: 0,
                       ),
-                      child: const Text('Add Another', style: TextStyle(color: Colors.white),),
+                      child: const Text(
+                        'Add Another',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
                 ],
@@ -635,10 +637,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                               isRequired: true,
                               keyboardType: TextInputType.number,
                               prefix: 'Rs.',
-                              validator: (v) =>
-                                  double.tryParse(v ?? '') == null
-                                      ? 'Enter valid price'
-                                      : null,
+                              validator: (v) => double.tryParse(v ?? '') == null
+                                  ? 'Enter valid price'
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -651,10 +652,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                               isRequired: true,
                               keyboardType: TextInputType.number,
                               prefix: 'Rs.',
-                              validator: (v) =>
-                                  double.tryParse(v ?? '') == null
-                                      ? 'Enter valid price'
-                                      : null,
+                              validator: (v) => double.tryParse(v ?? '') == null
+                                  ? 'Enter valid price'
+                                  : null,
                             ),
                           ),
                         ]),
@@ -758,9 +758,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _enableUnitConversion
-              ? _blue.withOpacity(0.35)
-              : _border,
+          color: _enableUnitConversion ? _blue.withOpacity(0.35) : _border,
           width: _enableUnitConversion ? 2 : 1,
         ),
         boxShadow: [
@@ -871,7 +869,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ),
             child: Icon(
               Icons.transform,
-              color: _enableUnitConversion ? Colors.white : Colors.grey.shade600,
+              color:
+                  _enableUnitConversion ? Colors.white : Colors.grey.shade600,
               size: 20,
             ),
           ),
@@ -883,16 +882,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 const Text(
                   'Unit Conversion & Pricing',
                   style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _slate),
+                      fontSize: 14, fontWeight: FontWeight.w600, color: _slate),
                 ),
                 Text(
                   _enableUnitConversion
                       ? '${_conversionRows.length + 1} tiers configured  •  tap + to add more'
                       : 'Define multiple packaging tiers with individual prices',
-                  style:
-                      TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -940,14 +936,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
               const Text(
                 'Base Unit',
                 style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _blue),
+                    fontSize: 13, fontWeight: FontWeight.w700, color: _blue),
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: _blue,
                   borderRadius: BorderRadius.circular(4),
@@ -960,8 +953,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ),
               const Spacer(),
               Text('Smallest sellable unit',
-                  style:
-                      TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ],
           ),
           const SizedBox(height: 10),
@@ -969,7 +961,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
             children: [
               // Unit type selector
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
@@ -980,9 +973,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   underline: const SizedBox(),
                   isDense: true,
                   style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _blue),
+                      fontSize: 13, fontWeight: FontWeight.w600, color: _blue),
                   items: baseUnits.map((u) {
                     return DropdownMenuItem(value: u, child: Text(u));
                   }).toList(),
@@ -1003,28 +994,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
                   ],
                   style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _blue),
+                      fontSize: 14, fontWeight: FontWeight.w600, color: _blue),
                   decoration: InputDecoration(
                     labelText: 'Price per $_selectedBaseUnit',
-                    labelStyle: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade600),
+                    labelStyle:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     prefixText: 'Rs. ',
-                    prefixStyle: const TextStyle(
-                        fontSize: 13, color: _muted),
+                    prefixStyle: const TextStyle(fontSize: 13, color: _muted),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            const BorderSide(color: _border)),
+                        borderSide: const BorderSide(color: _border)),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            const BorderSide(color: _blue, width: 1.5)),
+                        borderSide: const BorderSide(color: _blue, width: 1.5)),
                   ),
                   validator: _enableUnitConversion
                       ? (v) => (v?.isEmpty ?? true) ? 'Required' : null
@@ -1085,13 +1071,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 child: TextFormField(
                   controller: row.nameController,
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: color),
+                      fontSize: 13, fontWeight: FontWeight.w700, color: color),
                   decoration: InputDecoration(
                     hintText: 'Unit name',
-                    hintStyle: TextStyle(
-                        color: color.withOpacity(0.4), fontSize: 13),
+                    hintStyle:
+                        TextStyle(color: color.withOpacity(0.4), fontSize: 13),
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -1105,11 +1089,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(4)),
+                    color: color, borderRadius: BorderRadius.circular(4)),
                 child: Text(tierLabel,
                     style: const TextStyle(
                         fontSize: 8,
@@ -1127,8 +1109,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Icon(Icons.close,
-                      size: 16, color: Colors.red.shade400),
+                  child:
+                      Icon(Icons.close, size: 16, color: Colors.red.shade400),
                 ),
               ),
             ],
@@ -1140,8 +1122,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             children: [
               // Contains
               Text('Contains',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.grey.shade500)),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
               const SizedBox(width: 8),
               // Quantity input
               SizedBox(
@@ -1149,35 +1130,28 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 child: TextFormField(
                   controller: row.quantityController,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: color),
+                      fontSize: 14, fontWeight: FontWeight.w700, color: color),
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 10),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                            color: color.withOpacity(0.4))),
+                        borderSide: BorderSide(color: color.withOpacity(0.4))),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: color, width: 1.5)),
+                        borderSide: BorderSide(color: color, width: 1.5)),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '${row.containsUnit}s',
-                style: TextStyle(
-                    fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               const Spacer(),
               // Price input
@@ -1187,33 +1161,27 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   controller: row.priceController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d*\.?\d*'))
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
                   ],
                   style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: color),
+                      fontSize: 14, fontWeight: FontWeight.w600, color: color),
                   decoration: InputDecoration(
                     labelText:
                         '${row.nameController.text.isEmpty ? 'Unit' : row.nameController.text} Price',
-                    labelStyle: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade600),
+                    labelStyle:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
                     prefixText: 'Rs. ',
-                    prefixStyle: const TextStyle(
-                        fontSize: 13, color: _muted),
+                    prefixStyle: const TextStyle(fontSize: 13, color: _muted),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 10),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                            color: color.withOpacity(0.3))),
+                        borderSide: BorderSide(color: color.withOpacity(0.3))),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: color, width: 1.5)),
+                        borderSide: BorderSide(color: color, width: 1.5)),
                   ),
                   onChanged: (_) {
                     _recalcAllPrices();
@@ -1274,9 +1242,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             const Text(
               'Add Conversion Tier',
               style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _blue),
+                  fontSize: 13, fontWeight: FontWeight.w600, color: _blue),
             ),
             const SizedBox(width: 6),
             Text(
@@ -1296,8 +1262,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     for (int i = 0; i < _conversionRows.length; i++) {
       final row = _conversionRows[i];
-      final name =
-          row.nameController.text.isNotEmpty ? row.nameController.text : 'Tier ${i + 1}';
+      final name = row.nameController.text.isNotEmpty
+          ? row.nameController.text
+          : 'Tier ${i + 1}';
       final qty = int.tryParse(row.quantityController.text) ?? 1;
       lines.add('1 $name = $qty ${previousUnit}s');
       previousUnit = name;
@@ -1386,8 +1353,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12)),
@@ -1449,9 +1416,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 _buildPriceTableRow(
                   unit: _selectedBaseUnit,
                   contains: '1',
-                  price: double.tryParse(
-                          _pricePerBaseUnitController.text) ??
-                      0,
+                  price: double.tryParse(_pricePerBaseUnitController.text) ?? 0,
                   isBase: true,
                   color: _blue,
                   isLast: _conversionRows.isEmpty,
@@ -1463,22 +1428,17 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   final name = row.nameController.text.isNotEmpty
                       ? row.nameController.text
                       : 'Tier ${i + 1}';
-                  final qty =
-                      int.tryParse(row.quantityController.text) ?? 1;
+                  final qty = int.tryParse(row.quantityController.text) ?? 1;
                   final prevName = i == 0
                       ? _selectedBaseUnit
-                      : (_conversionRows[i - 1].nameController.text
-                              .isNotEmpty
+                      : (_conversionRows[i - 1].nameController.text.isNotEmpty
                           ? _conversionRows[i - 1].nameController.text
                           : 'Unit');
-                  final price =
-                      double.tryParse(row.priceController.text) ?? 0;
+                  final price = double.tryParse(row.priceController.text) ?? 0;
 
                   // Calculated = previous price × qty
                   double prevPrice = i == 0
-                      ? (double.tryParse(
-                              _pricePerBaseUnitController.text) ??
-                          0)
+                      ? (double.tryParse(_pricePerBaseUnitController.text) ?? 0)
                       : (double.tryParse(
                               _conversionRows[i - 1].priceController.text) ??
                           0);
@@ -1510,9 +1470,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
     bool isLast = false,
     Color color = _green,
   }) {
-    double savings = calculatedPrice != null && price > 0
-        ? calculatedPrice - price
-        : 0;
+    double savings =
+        calculatedPrice != null && price > 0 ? calculatedPrice - price : 0;
     double savingsPercent = calculatedPrice != null && calculatedPrice > 0
         ? (savings / calculatedPrice) * 100
         : 0;
@@ -1525,8 +1484,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             : Border(bottom: BorderSide(color: Colors.grey.shade200)),
         borderRadius: isLast
             ? const BorderRadius.only(
-                bottomLeft: Radius.circular(8),
-                bottomRight: Radius.circular(8))
+                bottomLeft: Radius.circular(8), bottomRight: Radius.circular(8))
             : null,
       ),
       child: Row(
@@ -1546,9 +1504,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     unit,
                     style: TextStyle(
                         fontSize: 13,
-                        fontWeight: isBase
-                            ? FontWeight.w600
-                            : FontWeight.w500,
+                        fontWeight: isBase ? FontWeight.w600 : FontWeight.w500,
                         color: _slate),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1558,8 +1514,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           ),
           Expanded(
             child: Text(contains,
-                style:
-                    TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 textAlign: TextAlign.center),
           ),
           Expanded(
@@ -1577,8 +1532,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 if (savings > 0)
                   Container(
                     margin: const EdgeInsets.only(top: 2),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                         color: _green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4)),
@@ -1611,8 +1566,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           decoration: BoxDecoration(
               color: _blue.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12)),
-          child:
-              const Icon(Icons.add_box_rounded, color: _blue, size: 24),
+          child: const Icon(Icons.add_box_rounded, color: _blue, size: 24),
         ),
         const SizedBox(width: 16),
         Column(
@@ -1637,8 +1591,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           onPressed: _clearForm,
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('Reset'),
-          style:
-              TextButton.styleFrom(foregroundColor: Colors.grey.shade600),
+          style: TextButton.styleFrom(foregroundColor: Colors.grey.shade600),
         ),
       ],
     );
@@ -1670,10 +1623,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12)),
-              border:
-                  Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                  topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
             child: Row(
               children: [
@@ -1728,8 +1679,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     color: Color(0xFF475569))),
             if (isRequired)
               const Text(' *',
-                  style: TextStyle(
-                      color: Color(0xFFEF4444), fontSize: 12)),
+                  style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
           ],
         ),
         const SizedBox(height: 6),
@@ -1744,20 +1694,18 @@ class _AddItemScreenState extends State<AddItemScreen> {
               : null,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle:
-                TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
             prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade500),
             prefixText: prefix != null ? '$prefix ' : null,
-            prefixStyle: const TextStyle(
-                color: Color(0xFF475569), fontSize: 13),
+            prefixStyle:
+                const TextStyle(color: Color(0xFF475569), fontSize: 13),
             suffixText: suffix,
-            suffixStyle: const TextStyle(
-                color: Color(0xFF475569), fontSize: 13),
+            suffixStyle:
+                const TextStyle(color: Color(0xFF475569), fontSize: 13),
             filled: true,
-            fillColor:
-                readOnly ? const Color(0xFFF1F5F9) : Colors.white,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 12),
+            fillColor: readOnly ? const Color(0xFFF1F5F9) : Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: _border)),
@@ -1766,12 +1714,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 borderSide: const BorderSide(color: _border)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: _blue, width: 1.5)),
+                borderSide: const BorderSide(color: _blue, width: 1.5)),
             errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFFEF4444))),
+                borderSide: const BorderSide(color: Color(0xFFEF4444))),
             errorStyle: const TextStyle(fontSize: 11),
           ),
           validator: validator,
@@ -1805,18 +1751,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
           child: DropdownButtonFormField<String>(
             value: value,
             hint: Text(hint,
-                style: TextStyle(
-                    color: Colors.grey.shade400, fontSize: 13)),
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
             isExpanded: true,
             icon: Icon(Icons.keyboard_arrow_down,
                 color: Colors.grey.shade500, size: 20),
-            style:
-                const TextStyle(fontSize: 13, color: _slate),
+            style: const TextStyle(fontSize: 13, color: _slate),
             decoration: InputDecoration(
-              prefixIcon:
-                  Icon(icon, size: 18, color: Colors.grey.shade500),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 12),
+              prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade500),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: InputBorder.none,
             ),
             dropdownColor: Colors.white,
@@ -1824,8 +1767,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             items: items
                 .map((item) => DropdownMenuItem(
                     value: item,
-                    child: Text(item,
-                        style: const TextStyle(fontSize: 13))))
+                    child: Text(item, style: const TextStyle(fontSize: 13))))
                 .toList(),
             onChanged: onChanged,
           ),
@@ -1858,8 +1800,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     _enableUnitConversion
                         ? _selectedBaseUnit
                         : 'Select issue unit',
-                    style: TextStyle(
-                        color: Colors.grey.shade400, fontSize: 13),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                   ),
                   isExpanded: true,
                   icon: Icon(Icons.keyboard_arrow_down,
@@ -1877,8 +1818,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   items: issueUnits
                       .map((unit) => DropdownMenuItem(
                           value: unit,
-                          child: Text(unit,
-                              style: const TextStyle(fontSize: 13))))
+                          child:
+                              Text(unit, style: const TextStyle(fontSize: 13))))
                       .toList(),
                   onChanged: _enableUnitConversion
                       ? null
@@ -1900,13 +1841,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Widget _buildProfitIndicator() {
-    double tradePrice =
-        double.tryParse(_tradePriceController.text) ?? 0;
-    double retailPrice =
-        double.tryParse(_retailPriceController.text) ?? 0;
+    double tradePrice = double.tryParse(_tradePriceController.text) ?? 0;
+    double retailPrice = double.tryParse(_retailPriceController.text) ?? 0;
     double profit = retailPrice - tradePrice;
-    double profitPercent =
-        tradePrice > 0 ? (profit / tradePrice) * 100 : 0;
+    double profitPercent = tradePrice > 0 ? (profit / tradePrice) * 100 : 0;
 
     Color indicatorColor = profitPercent >= 20
         ? _green
@@ -1924,9 +1862,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
       child: Row(
         children: [
           Icon(
-            profitPercent >= 10
-                ? Icons.trending_up
-                : Icons.trending_down,
+            profitPercent >= 10 ? Icons.trending_up : Icons.trending_down,
             color: indicatorColor,
             size: 20,
           ),
@@ -1935,8 +1871,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Profit Margin',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600)),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               Text(
                 'Rs. ${profit.toStringAsFixed(0)} (${profitPercent.toStringAsFixed(1)}%)',
                 style: TextStyle(
@@ -1948,8 +1883,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           ),
           const Spacer(),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
                 color: indicatorColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(4)),
@@ -1999,8 +1933,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.save_outlined, size: 18),
-            label:
-                Text(_isSaving ? 'Saving...' : 'Save Product'),
+            label: Text(_isSaving ? 'Saving...' : 'Save Product'),
             style: ElevatedButton.styleFrom(
               backgroundColor: _blue,
               foregroundColor: Colors.white,
@@ -2036,15 +1969,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12)),
-              border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade200)),
+                  topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.preview_outlined,
-                    size: 18, color: _muted),
+                const Icon(Icons.preview_outlined, size: 18, color: _muted),
                 const SizedBox(width: 8),
                 const Text('Preview',
                     style: TextStyle(
@@ -2054,8 +1984,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 const Spacer(),
                 if (_enableUnitConversion)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                         color: _blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4)),
@@ -2131,15 +2061,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: TextStyle(
-                  fontSize: 11, color: Colors.grey.shade600)),
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
           Flexible(
             child: Text(
               value,
               style: TextStyle(
                   fontSize: 11,
-                  fontWeight:
-                      isBold ? FontWeight.w600 : FontWeight.w500,
+                  fontWeight: isBold ? FontWeight.w600 : FontWeight.w500,
                   color: valueColor ?? _slate),
               textAlign: TextAlign.right,
               overflow: TextOverflow.ellipsis,

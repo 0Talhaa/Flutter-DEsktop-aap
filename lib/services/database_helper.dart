@@ -1,5 +1,7 @@
 // lib/services/database_helper.dart
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:medical_app/models/brand.dart';
 import 'package:medical_app/models/issue_unit.dart';
@@ -33,19 +35,27 @@ class DatabaseHelper {
     return _database!;
   }
 
-  Future<Database> _initDB(String fileName) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, fileName);
+Future<Database> _initDB(String fileName) async {
+  final appDataPath = Platform.environment['LOCALAPPDATA'];
 
-    debugPrint('📁 Database Path: $path');
+  final dbDir = Directory(join(appDataPath!, 'MedicalPOS'));
 
-    return await openDatabase(
-      path,
-      version: 11, // Incremented version for new column
-      onCreate: _createDB,
-      onUpgrade: _onUpgrade,
-    );
+  // Folder create agar exist na ho
+  if (!await dbDir.exists()) {
+    await dbDir.create(recursive: true);
   }
+
+  final path = join(dbDir.path, fileName);
+
+  debugPrint('📁 FIXED Database Path: $path');
+
+  return await openDatabase(
+    path,
+    version: 11,
+    onCreate: _createDB,
+    onUpgrade: _onUpgrade,
+  );
+}
 
   Future<String> getDatabasePath() async {
     final dbPath = await getDatabasesPath();
@@ -1161,13 +1171,22 @@ class DatabaseHelper {
         'purchaseId': purchaseId,
         'productId': item.productId,
         'productName': item.productName,
+        'packing': item.packing,
         'quantity': item.quantity,
         'tradePrice': item.tradePrice,
+        'retailPrice': item.retailPrice ?? 0,
+        'discount': item.discount ?? 0,
+        'salesTax': item.salesTax ?? 0,
         'lineTotal': item.lineTotal,
+        'unitType': item.unitType,
+        'baseQuantity': item.baseQuantity,
+        'expiryDate': item.expiryDate,
+        'batchNumber': item.batchNumber,
       });
 
+      final stockToAdd = item.baseQuantity ?? item.quantity;
       await db.rawUpdate('UPDATE products SET stock = stock + ? WHERE id = ?', [
-        item.quantity,
+        stockToAdd,
         item.productId,
       ]);
     }
@@ -1175,55 +1194,78 @@ class DatabaseHelper {
     return purchaseId;
   }
 
-  Future<int> addPurchaseWithDetails({
-    required String invoiceNumber,
-    required DateTime date,
-    required int supplierId,
-    required String supplierName,
-    required double totalAmount,
-    required double amountPaid,
-    required List<PurchaseItem> items,
-    String? notes,
-  }) async {
-    final db = await instance.database;
+ Future<int> addPurchaseWithDetails({
+  required String invoiceNumber,
+  required DateTime date,
+  required int supplierId,
+  required String supplierName,
+  required double totalAmount,
+  required double amountPaid,
+  required List<PurchaseItem> items,
+  String? notes,
+}) async {
+  final db = await instance.database;
+  
+  try {
+    // ✅ Use transaction for atomic operation
+    return await db.transaction((txn) async {
+      final balance = totalAmount - amountPaid;
 
-    final balance = totalAmount - amountPaid;
+      final purchaseId = await txn.insert('purchases', {
+        'invoiceNumber': invoiceNumber,
+        'date': date.toIso8601String(),
+        'supplierId': supplierId,
+        'supplierName': supplierName,
+        'totalAmount': totalAmount,
+        'amountPaid': amountPaid,
+        'balance': balance,
+        'status': balance <= 0 ? 'paid' : 'pending',
+        'notes': notes,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
 
-    final purchaseId = await db.insert('purchases', {
-      'invoiceNumber': invoiceNumber,
-      'date': date.toIso8601String(),
-      'supplierId': supplierId,
-      'supplierName': supplierName,
-      'totalAmount': totalAmount,
-      'amountPaid': amountPaid,
-      'balance': balance,
-      'status': balance <= 0 ? 'paid' : 'pending',
-      'notes': notes,
-      'createdAt': DateTime.now().toIso8601String(),
+      debugPrint('✅ Purchase entry saved with ID: $purchaseId');
+
+      for (var item in items) {
+        await txn.insert('purchase_items', {
+          'purchaseId': purchaseId,
+          'productId': item.productId,
+          'productName': item.productName,
+          'packing': item.packing,
+          'quantity': item.quantity,
+          'tradePrice': item.tradePrice,
+          'discount': item.discount ?? 0,
+          'salesTax': item.salesTax ?? 0,
+          'lineTotal': item.lineTotal,
+          'unitType': item.unitType,
+          'baseQuantity': item.baseQuantity ?? item.quantity, // ✅ Fallback
+        });
+
+        final stockToAdd = item.baseQuantity ?? item.quantity;
+        
+        debugPrint('📦 Adding stock: $stockToAdd to product ${item.productId}');
+        
+        // ✅ Update stock
+        final updateCount = await txn.rawUpdate(
+          'UPDATE products SET stock = stock + ? WHERE id = ?',
+          [stockToAdd, item.productId],
+        );
+        
+        if (updateCount == 0) {
+          debugPrint('⚠️ Warning: Product ${item.productId} not found');
+        } else {
+          debugPrint('✅ Stock updated for product ${item.productId}');
+        }
+      }
+
+      debugPrint('🎉 Purchase transaction completed successfully');
+      return purchaseId;
     });
-
-    for (var item in items) {
-        await db.insert('purchase_items', {
-        'purchaseId': purchaseId,
-        'productId': item.productId,
-        'productName': item.productName,
-        'quantity': item.quantity,
-        'tradePrice': item.tradePrice,
-        'discount': item.discount ?? 0,   // ← ADD THIS
-        'salesTax': item.salesTax ?? 0,   // ← ADD THIS
-        'lineTotal': item.lineTotal,
-        'unitType': item.unitType,        // ← ADD THIS
-        'baseQuantity': item.baseQuantity, // ← ADD THIS
-      });
-
-      await db.rawUpdate('UPDATE products SET stock = stock + ? WHERE id = ?', [
-        item.quantity,
-        item.productId,
-      ]);
-    }
-
-    return purchaseId;
+  } catch (e) {
+    debugPrint('❌ Purchase transaction failed: $e');
+    rethrow; // ✅ Propagate error to UI
   }
+}
 
   Future<List<Map<String, dynamic>>> getPurchasesInDateRange(
     String from,
@@ -1690,13 +1732,13 @@ class DatabaseHelper {
   // SETTINGS OPERATIONS
   // ============================================================================
 
-  Future<void> saveSetting(String key, String value) async {
-    final db = await instance.database;
-    await db.insert('settings', {
-      'key': key,
-      'value': value,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  // Future<void> saveSetting(String key, String value) async {
+  //   final db = await instance.database;
+  //   await db.insert('settings', {
+  //     'key': key,
+  //     'value': value,
+  //   }, conflictAlgorithm: ConflictAlgorithm.replace);
+  // }
 
   Future<String?> getSetting(String key) async {
     final db = await instance.database;
@@ -1707,6 +1749,65 @@ class DatabaseHelper {
     );
     return result.isNotEmpty ? result.first['value'] as String? : null;
   }
+
+  // ============================================================================
+// COMPANY SETTINGS OPERATIONS
+// ============================================================================
+
+Future<void> saveCompanySettings({
+  required String shopName,
+  required String shopAddress,
+  required String shopPhone,
+  String? shopTagline,
+  String? shopEmail,
+  String? shopLogo,
+}) async {
+  final db = await instance.database;
+  
+  await db.insert('settings', {'key': 'shop_name', 'value': shopName},
+      conflictAlgorithm: ConflictAlgorithm.replace);
+  await db.insert('settings', {'key': 'shop_address', 'value': shopAddress},
+      conflictAlgorithm: ConflictAlgorithm.replace);
+  await db.insert('settings', {'key': 'shop_phone', 'value': shopPhone},
+      conflictAlgorithm: ConflictAlgorithm.replace);
+  
+  if (shopTagline != null) {
+    await db.insert('settings', {'key': 'shop_tagline', 'value': shopTagline},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+  
+  if (shopEmail != null) {
+    await db.insert('settings', {'key': 'shop_email', 'value': shopEmail},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+  
+  if (shopLogo != null) {
+    await db.insert('settings', {'key': 'shop_logo', 'value': shopLogo},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+  
+  debugPrint('✅ Company settings saved');
+}
+
+Future<Map<String, String?>> getCompanySettings() async {
+  final db = await instance.database;
+  
+  final shopName = await getSetting('shop_name');
+  final shopAddress = await getSetting('shop_address');
+  final shopPhone = await getSetting('shop_phone');
+  final shopTagline = await getSetting('shop_tagline');
+  final shopEmail = await getSetting('shop_email');
+  final shopLogo = await getSetting('shop_logo');
+  
+  return {
+    'shop_name': shopName ?? 'Medical Store',
+    'shop_address': shopAddress ?? 'Shop Address',
+    'shop_phone': shopPhone ?? '0300-0000000',
+    'shop_tagline': shopTagline,
+    'shop_email': shopEmail,
+    'shop_logo': shopLogo,
+  };
+}
 
   // ============================================================================
   // DASHBOARD QUERIES

@@ -5,172 +5,666 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:medical_app/models/sale_item.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:medical_app/services/thermal_print_service_3inch.dart';
+import 'package:medical_app/services/thermal_print_service_6inch.dart';
 
-
-// Import your thermal print service
-// import 'thermal_print_service_3inch.dart'; // Uncomment this
-
-// ═════════════════════════════════════════════════════════════════════════════
-// PRINTER COMMUNICATOR - Handles actual sending of bytes to printer
-// ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// PRINTER COMMUNICATOR - USB ONLY (Desktop + Android)
+// ═════════════════════════════════════════════════════════════════
 class PrinterCommunicator {
   static bool debugMode = true;
+
+  static dynamic _usbPrinter;
+  static bool _usbConnected = false;
+  static Map<String, dynamic>? _connectedUsbDevice;
 
   static void _log(String msg) {
     if (debugMode) debugPrint('[Printer] $msg');
   }
 
-  /// Test printer connection
-  static Future<Map<String, dynamic>> testConnection({
-    required String type,
-    required String ip,
-    required int port,
-    required String btName,
-  }) async {
-    _log('Testing $type printer connection...');
+  static bool get isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-    if (type == 'USB') {
-      return _testUSB();
-    } else if (type == 'Network') {
-      return _testNetwork(ip, port);
-    } else if (type == 'Bluetooth') {
-      return _testBluetooth(btName);
+  static bool get isAndroid => Platform.isAndroid;
+
+  // ─────────────────────────────────────────────────────────
+  // GET AVAILABLE USB PRINTERS
+  // ─────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getUsbPrinters() async {
+    try {
+      if (isDesktop) {
+        return await _getDesktopPrinters();
+      } else if (isAndroid) {
+        return await _getAndroidUsbPrinters();
+      }
+      return [];
+    } catch (e) {
+      _log('❌ USB scan error: $e');
+      return [];
     }
-
-    return {'success': false, 'message': 'Unknown printer type'};
   }
 
-  /// Print receipt bytes
-  static Future<Map<String, dynamic>> print({
-    required String type,
+  // ─────────────────────────────────────────────────────────
+  // DESKTOP: Find system printers
+  // ─────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> _getDesktopPrinters() async {
+    final printers = <Map<String, dynamic>>[];
+
+    try {
+      if (Platform.isWindows) {
+        // Primary method: PowerShell Get-Printer
+        final psResult = await Process.run(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            'Get-Printer | Select-Object Name,PortName,PrinterStatus | ConvertTo-Csv -NoTypeInformation',
+          ],
+          runInShell: false,
+        );
+
+        if (psResult.exitCode == 0) {
+          final lines = (psResult.stdout as String)
+              .split('\n')
+              .where((l) => l.trim().isNotEmpty)
+              .toList();
+
+          for (int i = 1; i < lines.length; i++) {
+            final line = lines[i].replaceAll('"', '').trim();
+            final parts = line.split(',');
+            if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+              printers.add({
+                'productName': parts[0].trim(),
+                'portName': parts.length > 1 ? parts[1].trim() : 'Unknown',
+                'status': parts.length > 2 ? parts[2].trim() : 'Unknown',
+                'type': 'desktop',
+              });
+            }
+          }
+        }
+
+        // Fallback: wmic
+        if (printers.isEmpty) {
+          final result = await Process.run(
+            'wmic',
+            ['printer', 'get', 'Name,PortName,Status', '/format:csv'],
+            runInShell: true,
+          );
+
+          if (result.exitCode == 0) {
+            final lines = (result.stdout as String)
+                .split('\n')
+                .where((l) => l.trim().isNotEmpty)
+                .toList();
+
+            for (int i = 1; i < lines.length; i++) {
+              final parts = lines[i].split(',');
+              if (parts.length >= 2) {
+                final name = parts[1].trim();
+                if (name.isNotEmpty) {
+                  printers.add({
+                    'productName': name,
+                    'portName':
+                        parts.length > 2 ? parts[2].trim() : 'Unknown',
+                    'status':
+                        parts.length > 3 ? parts[3].trim() : 'Unknown',
+                    'type': 'desktop',
+                  });
+                }
+              }
+            }
+          }
+        }
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        final result = await Process.run('lpstat', ['-p'], runInShell: true);
+        if (result.exitCode == 0) {
+          final lines = (result.stdout as String).split('\n');
+          for (final line in lines) {
+            if (line.contains('printer')) {
+              final match = RegExp(r'printer (\S+)').firstMatch(line);
+              if (match != null) {
+                printers.add({
+                  'productName': match.group(1)!,
+                  'portName': 'CUPS',
+                  'status': line.contains('idle') ? 'Ready' : 'Busy',
+                  'type': 'desktop',
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      _log('❌ Desktop printer scan error: $e');
+    }
+
+    _log('Found ${printers.length} desktop printer(s)');
+    for (final p in printers) {
+      _log('  → ${p['productName']} (Port: ${p['portName']})');
+    }
+
+    return printers;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ANDROID: Find USB OTG printers
+  // ─────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> _getAndroidUsbPrinters() async {
+    try {
+      final devices = await _callAndroidUsbScan();
+      _log('Found ${devices.length} Android USB device(s)');
+      return devices;
+    } catch (e) {
+      _log('❌ Android USB scan error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _callAndroidUsbScan() async {
+    try {
+      final module = await _loadUsbModule();
+      if (module != null) {
+        final devices = await module.getUSBDeviceList();
+        return List<Map<String, dynamic>>.from(devices);
+      }
+    } catch (e) {
+      _log('USB module not available: $e');
+    }
+    return [];
+  }
+
+  static Future<dynamic> _loadUsbModule() async {
+    if (!isAndroid) return null;
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // TEST CONNECTION
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> testConnection() async {
+    _log('Testing USB printer connection...');
+
+    if (isDesktop) {
+      return _testDesktopPrinter();
+    } else if (isAndroid) {
+      return _testAndroidUsb();
+    }
+
+    return {'success': false, 'message': '❌ Unsupported platform'};
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // PRINT RECEIPT
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> printReceipt({
     required Uint8List bytes,
-    required String ip,
-    required int port,
-    required String btName,
+    String? printerName,
   }) async {
-    _log('Attempting to print ${bytes.length} bytes via $type...');
+    _log('Attempting to print ${bytes.length} bytes via USB...');
 
-    if (type == 'Network') {
-      return _printNetwork(bytes, ip, port);
-    } else if (type == 'USB') {
-      return _printUSB(bytes);
-    } else if (type == 'Bluetooth') {
-      return _printBluetooth(bytes, btName);
+    if (isDesktop) {
+      return _printDesktop(bytes, printerName);
+    } else if (isAndroid) {
+      return _printAndroidUsb(bytes);
     }
 
-    return {'success': false, 'message': 'Unknown printer type'};
+    return {'success': false, 'message': '❌ Unsupported platform'};
   }
 
-  // ───────────────────────────────────────────────────────────
-  // NETWORK PRINTING
-  // ───────────────────────────────────────────────────────────
-
-  static Future<Map<String, dynamic>> _testNetwork(String ip, int port) async {
-    Socket? socket;
+  // ─────────────────────────────────────────────────────────
+  // DESKTOP — TEST
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _testDesktopPrinter() async {
     try {
-      _log('Connecting to $ip:$port...');
-      socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
-      _log('✅ Connected successfully!');
+      final printers = await _getDesktopPrinters();
 
-      // Send init command
-      socket.add([0x1B, 0x40]);
-      await socket.flush();
+      if (printers.isEmpty) {
+        return {
+          'success': false,
+          'message': '❌ No printers found.\n\n'
+              'Make sure:\n'
+              '• Printer is powered ON\n'
+              '• USB cable is connected\n'
+              '• Printer driver is installed\n'
+              '• Printer appears in system settings',
+        };
+      }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      final thermalPrinters = printers.where((p) {
+        final name = (p['productName'] ?? '').toString().toLowerCase();
+        return name.contains('thermal') ||
+            name.contains('pos') ||
+            name.contains('receipt') ||
+            name.contains('58mm') ||
+            name.contains('80mm') ||
+            name.contains('xp-') ||
+            name.contains('rp') ||
+            name.contains('epson') ||
+            name.contains('star') ||
+            name.contains('bixolon') ||
+            name.contains('citizen') ||
+            name.contains('copper') ||
+            name.contains('bc-');
+      }).toList();
+
+      final printerList =
+          printers.map((p) => '• ${p['productName']}').join('\n');
+
+      if (thermalPrinters.isNotEmpty) {
+        return {
+          'success': true,
+          'message': '✅ Thermal printer found!\n\n'
+              'Detected:\n$printerList\n\n'
+              'Recommended: ${thermalPrinters.first['productName']}',
+          'printers': printers,
+          'recommended': thermalPrinters.first['productName'],
+        };
+      }
 
       return {
         'success': true,
-        'message': '✅ Network printer reachable at $ip:$port.',
+        'message':
+            '✅ Printers found:\n\n$printerList\n\nSelect your thermal printer.',
+        'printers': printers,
       };
     } catch (e) {
-      _log('❌ Connection failed: $e');
-      return {
-        'success': false,
-        'message': '❌ Cannot reach $ip:$port. Check IP address, port, '
-            'and ensure printer is on the same network. Error: $e',
-      };
-    } finally {
-      socket?.destroy();
+      return {'success': false, 'message': '❌ Error: $e'};
     }
   }
 
-  static Future<Map<String, dynamic>> _printNetwork(
+  // ─────────────────────────────────────────────────────────
+  // DESKTOP — PRINT
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printDesktop(
     Uint8List bytes,
-    String ip,
-    int port,
+    String? printerName,
   ) async {
-    Socket? socket;
     try {
-      _log('Connecting to printer at $ip:$port...');
-      socket = await Socket.connect(ip, port,
-          timeout: const Duration(seconds: 5));
-      _log('Connected! Sending ${bytes.length} bytes...');
+      if (Platform.isWindows) {
+        return _printWindows(bytes, printerName);
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        return _printUnix(bytes, printerName);
+      }
+      return {'success': false, 'message': '❌ Unsupported desktop OS'};
+    } catch (e) {
+      return {'success': false, 'message': '❌ Print error: $e'};
+    }
+  }
 
-      socket.add(bytes);
-      await socket.flush();
-      _log('Bytes sent successfully!');
+  // ─────────────────────────────────────────────────────────
+  // WINDOWS — Main print method
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printWindows(
+    Uint8List bytes,
+    String? printerName,
+  ) async {
+    try {
+      // Find printer if not specified
+      if (printerName == null || printerName.isEmpty) {
+        final printers = await _getDesktopPrinters();
+        if (printers.isEmpty) {
+          return {'success': false, 'message': '❌ No printers found'};
+        }
 
-      await Future.delayed(const Duration(milliseconds: 1000));
+        final thermal = printers.firstWhere(
+          (p) {
+            final name = (p['productName'] ?? '').toString().toLowerCase();
+            return name.contains('thermal') ||
+                name.contains('pos') ||
+                name.contains('receipt') ||
+                name.contains('58') ||
+                name.contains('80') ||
+                name.contains('xp-') ||
+                name.contains('rp') ||
+                name.contains('copper') ||
+                name.contains('bc-');
+          },
+          orElse: () => printers.first,
+        );
+        printerName = thermal['productName'] as String;
+      }
 
+      _log('🖨️ Printing to: $printerName');
+
+      // Write bytes to temp file
+      final tempDir = Directory.systemTemp;
+      final tempFile = File(
+          '${tempDir.path}\\receipt_${DateTime.now().millisecondsSinceEpoch}.bin');
+      await tempFile.writeAsBytes(bytes);
+
+      _log('📄 Temp file: ${tempFile.path} (${bytes.length} bytes)');
+
+      // Try RAW printing via PowerShell script file
+      final result =
+          await _printWindowsRawViaPsFile(tempFile.path, printerName!);
+
+      // Clean up temp file
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+
+      return result;
+    } catch (e) {
+      _log('❌ Windows print error: $e');
+      return {'success': false, 'message': '❌ Print failed: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // WINDOWS — RAW print via .ps1 script file
+  // Avoids ALL PowerShell escaping issues
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printWindowsRawViaPsFile(
+    String tempFilePath,
+    String printerName,
+  ) async {
+    File? scriptFile;
+    try {
+      // Use forward slashes in PS script to avoid escape issues
+      final psFilePath = tempFilePath.replaceAll('\\', '/');
+      final scriptContent = _buildPowerShellScript(psFilePath, printerName);
+
+      final scriptPath =
+          '${Directory.systemTemp.path}\\print_${DateTime.now().millisecondsSinceEpoch}.ps1';
+      scriptFile = File(scriptPath);
+      await scriptFile.writeAsString(scriptContent);
+
+      _log('📜 PS1 script: $scriptPath');
+
+      final result = await Process.run(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          scriptPath,
+        ],
+        runInShell: false,
+      );
+
+      _log('PS stdout: ${result.stdout}');
+      _log('PS stderr: ${result.stderr}');
+      _log('PS exitCode: ${result.exitCode}');
+
+      final stdout = result.stdout.toString().trim();
+
+      if (stdout.contains('SUCCESS') || result.exitCode == 0) {
+        return {
+          'success': true,
+          'message': '✅ Receipt printed to $printerName',
+        };
+      }
+
+      // Fallback to CMD
+      _log('PS method failed, trying CMD fallback...');
+      return await _printWindowsCmdFallback(tempFilePath, printerName);
+    } catch (e) {
+      _log('❌ PS script error: $e');
+      return await _printWindowsCmdFallback(tempFilePath, printerName);
+    } finally {
+      try {
+        await scriptFile?.delete();
+      } catch (_) {}
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // BUILD PowerShell SCRIPT using winspool API
+  // Written to a .ps1 FILE — no escaping issues
+  // ─────────────────────────────────────────────────────────
+  static String _buildPowerShellScript(
+      String filePath, String printerName) {
+    // Escape single quotes in printer name for PS string
+    final safePrinterName = printerName.replaceAll("'", "''");
+    final safeFilePath = filePath.replaceAll("'", "''");
+
+    return r'''
+Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public class RawPrint {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public class DOCINFOA {
+        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    }
+
+    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA",
+        CharSet = CharSet.Ansi, SetLastError = true, ExactSpelling = true)]
+    public static extern bool OpenPrinter(string szPrinter,
+        out IntPtr hPrinter, IntPtr pd);
+
+    [DllImport("winspool.Drv", EntryPoint = "ClosePrinter",
+        SetLastError = true, ExactSpelling = true)]
+    public static extern bool ClosePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA",
+        CharSet = CharSet.Ansi, SetLastError = true, ExactSpelling = true)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level,
+        [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+    [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter",
+        SetLastError = true, ExactSpelling = true)]
+    public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter",
+        SetLastError = true, ExactSpelling = true)]
+    public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter",
+        SetLastError = true, ExactSpelling = true)]
+    public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "WritePrinter",
+        SetLastError = true, ExactSpelling = true)]
+    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes,
+        Int32 dwCount, out Int32 dwWritten);
+
+    public static bool SendFile(string printerName, string fileName) {
+        byte[] data = File.ReadAllBytes(fileName);
+        IntPtr ptr = Marshal.AllocCoTaskMem(data.Length);
+        Marshal.Copy(data, 0, ptr, data.Length);
+
+        IntPtr hPrinter = IntPtr.Zero;
+        DOCINFOA di = new DOCINFOA();
+        di.pDocName   = "Receipt";
+        di.pDataType  = "RAW";
+        di.pOutputFile = null;
+
+        bool ok = false;
+        try {
+            if (OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) {
+                if (StartDocPrinter(hPrinter, 1, di)) {
+                    if (StartPagePrinter(hPrinter)) {
+                        Int32 written;
+                        ok = WritePrinter(hPrinter, ptr, data.Length,
+                            out written);
+                        EndPagePrinter(hPrinter);
+                    }
+                    EndDocPrinter(hPrinter);
+                }
+                ClosePrinter(hPrinter);
+            }
+        } finally {
+            Marshal.FreeCoTaskMem(ptr);
+        }
+        return ok;
+    }
+}
+"@
+
+''' +
+        '''
+\$printerName = '$safePrinterName'
+\$filePath    = '$safeFilePath'
+
+Write-Host "Printer : \$printerName"
+Write-Host "File    : \$filePath"
+
+if (-not (Test-Path \$filePath)) {
+    Write-Host "ERROR: File not found: \$filePath"
+    exit 1
+}
+
+try {
+    \$ok = [RawPrint]::SendFile(\$printerName, \$filePath)
+    if (\$ok) {
+        Write-Host "SUCCESS"
+        exit 0
+    } else {
+        \$errCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        Write-Host "FAILED: Win32 error = \$errCode"
+        exit 1
+    }
+} catch {
+    Write-Host "EXCEPTION: \$_"
+    exit 1
+}
+''';
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // FALLBACK — CMD COPY command
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printWindowsCmdFallback(
+    String filePath,
+    String printerName,
+  ) async {
+    try {
+      _log('Trying CMD copy fallback to: $printerName');
+
+      // Try: copy /b file.bin "\\.\PrinterName"
+      final result = await Process.run(
+        'cmd.exe',
+        ['/c', 'copy', '/b', filePath, '\\\\.\\$printerName'],
+        runInShell: false,
+      );
+
+      _log('CMD stdout: ${result.stdout}');
+      _log('CMD stderr: ${result.stderr}');
+      _log('CMD exitCode: ${result.exitCode}');
+
+      if (result.exitCode == 0) {
+        return {
+          'success': true,
+          'message': '✅ Receipt printed (CMD fallback)',
+        };
+      }
+
+      // Try: print /d command
+      _log('Trying print /d command...');
+      final printResult = await Process.run(
+        'cmd.exe',
+        ['/c', 'print', '/d:$printerName', filePath],
+        runInShell: false,
+      );
+
+      _log('Print stdout: ${printResult.stdout}');
+      _log('Print stderr: ${printResult.stderr}');
+
+      if (printResult.exitCode == 0) {
+        return {
+          'success': true,
+          'message': '✅ Receipt printed (print command)',
+        };
+      }
+
+      return {
+        'success': false,
+        'message': '❌ All print methods failed.\n\n'
+            'Printer: $printerName\n\n'
+            'Try:\n'
+            '• Check printer is online in Windows\n'
+            '• Run app as Administrator\n'
+            '• Reinstall printer driver\n'
+            '• Set printer as Default Printer',
+      };
+    } catch (e) {
+      return {'success': false, 'message': '❌ CMD fallback error: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // LINUX/macOS — Print via lp
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printUnix(
+    Uint8List bytes,
+    String? printerName,
+  ) async {
+    try {
+      final tempDir = Directory.systemTemp;
+      final tempFile = File(
+          '${tempDir.path}/receipt_${DateTime.now().millisecondsSinceEpoch}.bin');
+      await tempFile.writeAsBytes(bytes);
+
+      final args = <String>['-o', 'raw'];
+      if (printerName != null && printerName.isNotEmpty) {
+        args.addAll(['-d', printerName]);
+      }
+      args.add(tempFile.path);
+
+      final result = await Process.run('lp', args, runInShell: true);
+
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+
+      if (result.exitCode == 0) {
+        return {'success': true, 'message': '✅ Receipt sent to printer'};
+      }
+
+      return {
+        'success': false,
+        'message': '❌ Print failed: ${result.stderr}',
+      };
+    } catch (e) {
+      return {'success': false, 'message': '❌ Print error: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ANDROID — TEST USB
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _testAndroidUsb() async {
+    try {
+      final devices = await _getAndroidUsbPrinters();
+      if (devices.isEmpty) {
+        return {
+          'success': false,
+          'message': '❌ No USB printers found.\n\n'
+              'Make sure:\n'
+              '• Printer is powered ON\n'
+              '• Connected via USB OTG cable\n'
+              '• USB OTG adapter is working',
+        };
+      }
       return {
         'success': true,
-        'message': '✅ Print job sent successfully!',
+        'message':
+            '✅ USB printer found!\nDevice: ${devices.first['productName']}',
       };
     } catch (e) {
-      _log('❌ Print failed: $e');
-      return {
-        'success': false,
-        'message': '❌ Print failed: $e',
-      };
-    } finally {
-      socket?.destroy();
+      return {'success': false, 'message': '❌ USB error: $e'};
     }
   }
 
-  // ───────────────────────────────────────────────────────────
-  // USB PRINTING (Not implemented - requires additional packages)
-  // ───────────────────────────────────────────────────────────
-
-  static Future<Map<String, dynamic>> _testUSB() async {
-    _log('USB printer check requested');
-    return {
-      'success': true,
-      'message':
-          '✅ USB printer detected. (Simulated - implement actual USB detection)',
-    };
-  }
-
-  static Future<Map<String, dynamic>> _printUSB(Uint8List bytes) async {
-    _log('USB print requested with ${bytes.length} bytes');
+  // ─────────────────────────────────────────────────────────
+  // ANDROID — PRINT USB
+  // ─────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> _printAndroidUsb(
+      Uint8List bytes) async {
     return {
       'success': false,
-      'message':
-          '❌ USB printing not yet implemented. Add flutter_pos_printer_platform package.',
-    };
-  }
-
-  // ───────────────────────────────────────────────────────────
-  // BLUETOOTH PRINTING (Not implemented - requires additional packages)
-  // ───────────────────────────────────────────────────────────
-
-  static Future<Map<String, dynamic>> _testBluetooth(String name) async {
-    _log('Bluetooth printer check requested for: $name');
-    return {
-      'success': false,
-      'message':
-          '❌ Bluetooth printing not yet implemented. Add flutter_blue_plus package.',
-    };
-  }
-
-  static Future<Map<String, dynamic>> _printBluetooth(
-    Uint8List bytes,
-    String name,
-  ) async {
-    _log('Bluetooth print requested for: $name');
-    return {
-      'success': false,
-      'message':
-          '❌ Bluetooth printing not yet implemented. Add flutter_blue_plus package.',
+      'message': '❌ Android USB printing requires flutter_usb_printer.\n'
+          'Add it to pubspec.yaml for Android builds.',
     };
   }
 }
@@ -225,19 +719,14 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
 
   bool _showPrinterSettings = false;
   PrinterStatus _printerStatus = PrinterStatus.unknown;
-  String _printerType = 'USB';
-  String _printerIp = '';
-  String _printerPort = '9100';
-  String _printerName = '';
   bool _isChecking = false;
-  String _statusMessage = 'Press "Check Connection" to test your printer.';
-  Timer? _checkTimer;
+  String _statusMessage =
+      'Press "Scan for USB Printers" to detect your printer.';
+  String? _selectedPrinterName;
+  List<Map<String, dynamic>> _availablePrinters = [];
 
-  static const _kPrinterType = 'printer_type';
-  static const _kPrinterIp = 'printer_ip';
-  static const _kPrinterPort = 'printer_port';
-  static const _kPrinterName = 'printer_name';
   static const _kSelectedSize = 'slip_size';
+  static const _kSelectedPrinter = 'selected_printer_name';
 
   static const Color _paperColor = Color(0xFFFFFDE7);
   static const Color _inkColor = Color(0xFF1A1A1A);
@@ -245,206 +734,195 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   static const Color _accentColor = Color(0xFF1565C0);
 
   final _numFmt = NumberFormat('#,##0');
-  final _numFmt2 = NumberFormat('#,##0.00');
-
-  late TextEditingController _ipCtrl;
-  late TextEditingController _portCtrl;
-  late TextEditingController _nameCtrl;
 
   @override
   void initState() {
     super.initState();
     _fadeCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 280));
-    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _fadeAnim =
+        CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _fadeCtrl.forward();
-    _ipCtrl = TextEditingController();
-    _portCtrl = TextEditingController(text: '9100');
-    _nameCtrl = TextEditingController();
-    _loadPrinterSettings();
+    _loadSettings();
   }
 
   @override
   void dispose() {
     _fadeCtrl.dispose();
-    _checkTimer?.cancel();
-    _ipCtrl.dispose();
-    _portCtrl.dispose();
-    _nameCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPrinterSettings() async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _printerType = prefs.getString(_kPrinterType) ?? 'USB';
-      _printerIp = prefs.getString(_kPrinterIp) ?? '';
-      _printerPort = prefs.getString(_kPrinterPort) ?? '9100';
-      _printerName = prefs.getString(_kPrinterName) ?? '';
-      final savedSize = prefs.getInt(_kSelectedSize) ?? 0;
-      _selectedTab = savedSize;
-      _ipCtrl.text = _printerIp;
-      _portCtrl.text = _printerPort;
-      _nameCtrl.text = _printerName;
+      _selectedTab = prefs.getInt(_kSelectedSize) ?? 0;
+      _selectedPrinterName = prefs.getString(_kSelectedPrinter);
     });
   }
 
-  Future<void> _savePrinterSettings() async {
+  Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kPrinterType, _printerType);
-    await prefs.setString(_kPrinterIp, _ipCtrl.text.trim());
-    await prefs.setString(_kPrinterPort, _portCtrl.text.trim());
-    await prefs.setString(_kPrinterName, _nameCtrl.text.trim());
     await prefs.setInt(_kSelectedSize, _selectedTab);
-    setState(() {
-      _printerIp = _ipCtrl.text.trim();
-      _printerPort = _portCtrl.text.trim();
-      _printerName = _nameCtrl.text.trim();
-    });
+    if (_selectedPrinterName != null) {
+      await prefs.setString(_kSelectedPrinter, _selectedPrinterName!);
+    }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // UPDATED: Check printer connection using PrinterCommunicator
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
+  // CHECK USB PRINTER
+  // ═══════════════════════════════════════════════════════
   Future<void> _checkPrinterConnection() async {
-    await _savePrinterSettings();
-
     setState(() {
       _isChecking = true;
       _printerStatus = PrinterStatus.checking;
-      _statusMessage = 'Checking printer connection…';
+      _statusMessage = 'Scanning for USB printers…';
     });
 
-    // Use PrinterCommunicator to test connection
-    final result = await PrinterCommunicator.testConnection(
-      type: _printerType,
-      ip: _ipCtrl.text.trim(),
-      port: int.tryParse(_portCtrl.text.trim()) ?? 9100,
-      btName: _nameCtrl.text.trim(),
-    );
+    final result = await PrinterCommunicator.testConnection();
+    final printers = await PrinterCommunicator.getUsbPrinters();
 
     if (mounted) {
       setState(() {
         _isChecking = false;
-        _printerStatus =
-            result['success'] ? PrinterStatus.connected : PrinterStatus.error;
+        _availablePrinters = printers;
+        _printerStatus = result['success']
+            ? PrinterStatus.connected
+            : PrinterStatus.error;
         _statusMessage = result['message'];
+
+        if (result['recommended'] != null) {
+          _selectedPrinterName = result['recommended'];
+        } else if (printers.isNotEmpty && _selectedPrinterName == null) {
+          _selectedPrinterName =
+              printers.first['productName'] as String?;
+        }
       });
+      _saveSettings();
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // UPDATED: Actual printing method
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
+  // PRINT RECEIPT
+  // ═══════════════════════════════════════════════════════
   Future<void> _handleActualPrinting() async {
     try {
-      // Show loading
       if (!mounted) return;
+
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Printing receipt…'),
+                ],
+              ),
+            ),
+          ),
+        ),
       );
 
-      print('═══════════════════════════════════════');
-      print('🖨️  STARTING PRINT JOB');
-      print('═══════════════════════════════════════');
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('🖨️  STARTING USB PRINT JOB');
+      debugPrint('Printer: $_selectedPrinterName');
+      debugPrint('═══════════════════════════════════════');
 
-      // STEP 1: Generate ESC/POS bytes
-      print('📄 Generating receipt bytes...');
+      final Uint8List bytes;
 
-      // UNCOMMENT THIS WHEN YOU HAVE ThermalPrintService3Inch IMPORTED:
-      /*
-      final bytes = await ThermalPrintService3Inch.buildReceipt(
-        shopName: widget.shopName,
-        shopAddress: widget.shopAddress,
-        shopPhone: widget.shopPhone,
-        shopTagline: widget.shopTagline,
-        invoiceNumber: widget.invoiceNumber,
-        date: widget.date,
-        customerName: widget.customerName,
-        items: widget.cartItems
-            .map((item) => ReceiptItem(
-                  qty: item.quantity,
-                  productName: item.productName,
-                  tradePrice: item.tradePrice ?? 0,
-                  retailPrice: item.price,
-                  discountPercent: item.discount ?? 0,
-                  lineTotal: widget.getLineTotal(item),
-                ))
-            .toList(),
-        subtotal: widget.balances['subtotal'] ?? 0,
-        totalDiscount: widget.balances['discount'] ?? 0,
-        tax: widget.balances['tax'] ?? 0,
-        saleAmount: widget.balances['saleAmount'] ?? 0,
-        previousBalance: widget.balances['previousBalance'] ?? 0,
-        totalDue: widget.balances['totalDue'] ?? 0,
-        amountPaid: widget.balances['amountPaid'] ?? 0,
-        remainingBalance: widget.balances['remainingBalance'] ?? 0,
-        paymentMethod: widget.paymentMethod,
+      if (_selectedTab == 0) {
+        bytes = await ThermalPrintService80mm.buildReceipt(
+          shopName: widget.shopName,
+          shopAddress: widget.shopAddress,
+          shopPhone: widget.shopPhone,
+          shopTagline: widget.shopTagline,
+          invoiceNumber: widget.invoiceNumber,
+          date: widget.date,
+          customerName: widget.customerName,
+          items: widget.cartItems
+              .map((item) => ReceiptItem(
+                    qty: item.quantity,
+                    productName: item.productName,
+                    tradePrice: item.tradePrice ?? 0,
+                    retailPrice: item.price,
+                    discountPercent: item.discount ?? 0,
+                    lineTotal: widget.getLineTotal(item),
+                  ))
+              .toList(),
+          subtotal: widget.balances['subtotal'] ?? 0,
+          totalDiscount: widget.balances['discount'] ?? 0,
+          tax: widget.balances['tax'] ?? 0,
+          saleAmount: widget.balances['saleAmount'] ?? 0,
+          previousBalance: widget.balances['previousBalance'] ?? 0,
+          totalDue: widget.balances['totalDue'] ?? 0,
+          amountPaid: widget.balances['amountPaid'] ?? 0,
+          remainingBalance: widget.balances['remainingBalance'] ?? 0,
+          paymentMethod: widget.paymentMethod,
+        );
+      } else {
+        bytes = await ThermalPrintService6Inch.buildReceipt(
+          shopName: widget.shopName,
+          shopAddress: widget.shopAddress,
+          shopPhone: widget.shopPhone,
+          shopTagline: widget.shopTagline,
+          invoiceNumber: widget.invoiceNumber,
+          date: widget.date,
+          customerName: widget.customerName,
+          items: widget.cartItems
+              .map((item) => ReceiptItem6(
+                    qty: item.quantity,
+                    productName: item.productName,
+                    tradePrice: item.tradePrice ?? 0,
+                    retailPrice: item.price,
+                    discountPercent: item.discount ?? 0,
+                    lineTotal: widget.getLineTotal(item),
+                  ))
+              .toList(),
+          subtotal: widget.balances['subtotal'] ?? 0,
+          totalDiscount: widget.balances['discount'] ?? 0,
+          tax: widget.balances['tax'] ?? 0,
+          saleAmount: widget.balances['saleAmount'] ?? 0,
+          previousBalance: widget.balances['previousBalance'] ?? 0,
+          totalDue: widget.balances['totalDue'] ?? 0,
+          amountPaid: widget.balances['amountPaid'] ?? 0,
+          remainingBalance: widget.balances['remainingBalance'] ?? 0,
+          paymentMethod: widget.paymentMethod,
+        );
+      }
+
+      debugPrint('✅ Generated ${bytes.length} bytes');
+
+      final result = await PrinterCommunicator.printReceipt(
+        bytes: bytes,
+        printerName: _selectedPrinterName,
       );
-      */
 
-      // FOR TESTING: Simple test bytes (remove this when using real service)
-      final bytes = Uint8List.fromList([
-        0x1B, 0x40, // Initialize
-        0x1B, 0x61, 0x01, // Center align
-        // "TEST PRINT"
-        0x54, 0x45, 0x53, 0x54, 0x20, 0x50, 0x52, 0x49, 0x4E, 0x54,
-        0x0A, 0x0A, // Line feeds
-        // Invoice number
-        0x49, 0x6E, 0x76, 0x6F, 0x69, 0x63, 0x65, 0x3A, 0x20, // "Invoice: "
-      ]);
-      // Add invoice number bytes
-      final invoiceBytes = widget.invoiceNumber.codeUnits;
-      final testBytes = Uint8List.fromList([
-        ...bytes,
-        ...invoiceBytes,
-        0x0A, 0x0A, 0x0A, // Line feeds
-        0x1D, 0x56, 0x00, // Cut paper
-      ]);
+      debugPrint(result['success'] ? '✅ SUCCESS!' : '❌ FAILED!');
 
-      print('✅ Generated ${testBytes.length} bytes');
-
-      // STEP 2: Send to printer
-      print('📡 Sending to printer...');
-      final result = await PrinterCommunicator.print(
-        type: _printerType,
-        bytes: testBytes, // Change to 'bytes' when using real service
-        ip: _printerIp,
-        port: int.tryParse(_printerPort) ?? 9100,
-        btName: _printerName,
-      );
-
-      print('═══════════════════════════════════════');
-      print(result['success'] ? '✅ SUCCESS!' : '❌ FAILED!');
-      print(result['message']);
-      print('═══════════════════════════════════════');
-
-      // Close loading dialog
       if (mounted) Navigator.of(context).pop();
 
-      // Close preview if successful
       if (result['success'] && mounted) {
         Navigator.of(context).pop();
       }
 
-      // Show result
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message']),
-            backgroundColor: result['success'] ? Colors.green : Colors.red,
+            content: Text('${result['message']}'),
+            backgroundColor:
+                result['success'] ? Colors.green : Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e, stackTrace) {
-      print('═══════════════════════════════════════');
-      print('❌ EXCEPTION:');
-      print(e);
-      print(stackTrace);
-      print('═══════════════════════════════════════');
+      debugPrint('❌ EXCEPTION: $e');
+      debugPrint('$stackTrace');
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -459,15 +937,6 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     }
   }
 
-  bool _isValidIp(String ip) {
-    final parts = ip.split('.');
-    if (parts.length != 4) return false;
-    return parts.every((p) {
-      final n = int.tryParse(p);
-      return n != null && n >= 0 && n <= 255;
-    });
-  }
-
   double get _subtotal => widget.balances['subtotal'] ?? 0;
   double get _discount => widget.balances['discount'] ?? 0;
   double get _tax => widget.balances['tax'] ?? 0;
@@ -476,7 +945,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   double get _totalDue => widget.balances['totalDue'] ?? 0;
   double get _amountPaid => widget.balances['amountPaid'] ?? 0;
   double get _remaining => widget.balances['remainingBalance'] ?? 0;
-  int get _totalQty => widget.cartItems.fold(0, (s, i) => s + i.quantity);
+  int get _totalQty =>
+      widget.cartItems.fold(0, (s, i) => s + i.quantity);
 
   String _rs(double v) => 'Rs.${_numFmt.format(v)}';
 
@@ -485,7 +955,7 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     _fadeCtrl.reset();
     setState(() => _selectedTab = t);
     _fadeCtrl.forward();
-    SharedPreferences.getInstance().then((p) => p.setInt(_kSelectedSize, t));
+    _saveSettings();
   }
 
   @override
@@ -494,10 +964,11 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: 1050, maxHeight: size.height * 0.95),
+        constraints: BoxConstraints(
+            maxWidth: 1050, maxHeight: size.height * 0.95),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: Column(
@@ -529,12 +1000,19 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     );
   }
 
+  // ═══════════════════════════════════════════════════════
+  // TOP BAR
+  // ═══════════════════════════════════════════════════════
   Widget _buildTopBar() {
     return Container(
       height: 56,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1976D2)],
+          colors: [
+            Color(0xFF0D47A1),
+            Color(0xFF1565C0),
+            Color(0xFF1976D2)
+          ],
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -567,7 +1045,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           _buildPrinterStatusChip(),
           const Spacer(),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.18),
               borderRadius: BorderRadius.circular(6),
@@ -601,27 +1080,27 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
       case PrinterStatus.connected:
         chipColor = Colors.green.withOpacity(0.25);
         dotColor = const Color(0xFF66BB6A);
-        chipIcon = Icons.print;
-        chipLabel = 'Printer OK';
+        chipIcon = Icons.usb;
+        chipLabel = 'USB Ready';
         break;
       case PrinterStatus.error:
       case PrinterStatus.disconnected:
         chipColor = Colors.red.withOpacity(0.25);
         dotColor = const Color(0xFFEF5350);
-        chipIcon = Icons.print_disabled;
+        chipIcon = Icons.usb_off;
         chipLabel = 'No Printer';
         break;
       case PrinterStatus.checking:
         chipColor = Colors.orange.withOpacity(0.25);
         dotColor = Colors.orange;
         chipIcon = Icons.autorenew;
-        chipLabel = 'Checking…';
+        chipLabel = 'Scanning…';
         break;
       default:
         chipColor = Colors.white.withOpacity(0.12);
         dotColor = Colors.white38;
-        chipIcon = Icons.settings_outlined;
-        chipLabel = 'Printer Setup';
+        chipIcon = Icons.usb;
+        chipLabel = 'USB Setup';
     }
 
     return GestureDetector(
@@ -629,7 +1108,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           setState(() => _showPrinterSettings = !_showPrinterSettings),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: _showPrinterSettings
               ? Colors.white.withOpacity(0.25)
@@ -641,7 +1121,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
                 : Colors.white.withOpacity(0.2),
           ),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+        child:
+            Row(mainAxisSize: MainAxisSize.min, children: [
           Container(
             width: 7,
             height: 7,
@@ -649,7 +1130,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
               color: dotColor,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: dotColor.withOpacity(0.5), blurRadius: 4)
+                BoxShadow(
+                    color: dotColor.withOpacity(0.5), blurRadius: 4)
               ],
             ),
           ),
@@ -680,7 +1162,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
       onTap: () => _switchTab(idx),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: active ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
@@ -694,6 +1177,9 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     );
   }
 
+  // ═══════════════════════════════════════════════════════
+  // PRINTER SETTINGS PANEL
+  // ═══════════════════════════════════════════════════════
   Widget _buildPrinterSettingsPanel() {
     return Container(
       key: const ValueKey('printer_settings'),
@@ -702,22 +1188,25 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 14),
             decoration: const BoxDecoration(
               color: Color(0xFF151E27),
-              border: Border(bottom: BorderSide(color: Colors.white10)),
+              border:
+                  Border(bottom: BorderSide(color: Colors.white10)),
             ),
             child: Row(children: [
-              const Icon(Icons.settings, color: Colors.white70, size: 18),
+              const Icon(Icons.usb, color: Colors.white70, size: 18),
               const SizedBox(width: 8),
-              const Text('Printer Settings',
+              const Text('USB Printer',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
               GestureDetector(
-                onTap: () => setState(() => _showPrinterSettings = false),
+                onTap: () =>
+                    setState(() => _showPrinterSettings = false),
                 child: const Icon(Icons.chevron_right,
                     color: Colors.white38, size: 20),
               ),
@@ -731,85 +1220,36 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
                 children: [
                   _buildStatusCard(),
                   const SizedBox(height: 16),
-                  _sectionLabel('CONNECTION TYPE'),
-                  const SizedBox(height: 8),
-                  _buildPrinterTypeSelector(),
+                  _buildInfoBox(
+                    icon: Icons.usb,
+                    text:
+                        'USB thermal printers are detected automatically.\n\n'
+                        'Make sure:\n'
+                        '• Printer is powered ON\n'
+                        '• USB cable is connected\n'
+                        '• Printer driver is installed',
+                  ),
                   const SizedBox(height: 16),
-                  if (_printerType == 'Network') ...[
-                    _sectionLabel('NETWORK DETAILS'),
+                  if (_availablePrinters.isNotEmpty) ...[
+                    _sectionLabel('DETECTED PRINTERS'),
                     const SizedBox(height: 8),
-                    _buildTextField(
-                      controller: _ipCtrl,
-                      label: 'IP Address',
-                      hint: 'e.g. 192.168.1.100',
-                      icon: Icons.wifi,
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildTextField(
-                      controller: _portCtrl,
-                      label: 'Port',
-                      hint: '9100',
-                      icon: Icons.lan_outlined,
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 16),
-                  ] else if (_printerType == 'Bluetooth') ...[
-                    _sectionLabel('BLUETOOTH DETAILS'),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      controller: _nameCtrl,
-                      label: 'Printer Name',
-                      hint: 'e.g. RP80 Thermal Printer',
-                      icon: Icons.bluetooth,
-                    ),
-                    const SizedBox(height: 16),
-                  ] else ...[
-                    _buildInfoBox(
-                      icon: Icons.usb,
-                      text:
-                          'USB printers are detected automatically. Make sure '
-                          'the printer is powered ON and the cable is connected.',
-                    ),
+                    ..._availablePrinters
+                        .map((p) => _printerListItem(p)),
                     const SizedBox(height: 16),
                   ],
                   _sectionLabel('PAPER SIZE'),
                   const SizedBox(height: 8),
                   Row(children: [
                     Expanded(
-                        child:
-                            _paperSizeBtn('3-inch', 0, subtitle: '58mm · Compact')),
+                        child: _paperSizeBtn('3-inch', 0,
+                            subtitle: '58mm · Compact')),
                     const SizedBox(width: 8),
                     Expanded(
-                        child: _paperSizeBtn('6-inch', 1, subtitle: '152mm · Wide')),
+                        child: _paperSizeBtn('6-inch', 1,
+                            subtitle: '152mm · Wide')),
                   ]),
                   const SizedBox(height: 20),
                   _buildCheckButton(),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      await _savePrinterSettings();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('✅ Printer settings saved.'),
-                            backgroundColor: Color(0xFF2E7D32),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.save_outlined, size: 15),
-                    label: const Text('Save Settings',
-                        style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -818,11 +1258,11 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(children: [
               ElevatedButton.icon(
-                onPressed: _handleActualPrinting, // UPDATED: Use new method
+                onPressed: _handleActualPrinting,
                 icon: const Icon(Icons.print, size: 18),
                 label: const Text('Print Now',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1976D2),
                   foregroundColor: Colors.white,
@@ -837,16 +1277,85 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white60,
-                  side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                  side: BorderSide(
+                      color: Colors.white.withOpacity(0.2)),
                   minimumSize: const Size(double.infinity, 40),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text('Cancel', style: TextStyle(fontSize: 13)),
+                child: const Text('Cancel',
+                    style: TextStyle(fontSize: 13)),
               ),
             ]),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _printerListItem(Map<String, dynamic> printer) {
+    final name = printer['productName'] ?? 'Unknown';
+    final port = printer['portName'] ?? '';
+    final isSelected = _selectedPrinterName == name;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedPrinterName = name as String);
+        _saveSettings();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF1565C0).withOpacity(0.3)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF42A5F5)
+                : Colors.white.withOpacity(0.1),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(children: [
+          Icon(
+            isSelected
+                ? Icons.radio_button_checked
+                : Icons.radio_button_off,
+            color: isSelected
+                ? const Color(0xFF42A5F5)
+                : Colors.white30,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name.toString(),
+                    style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : Colors.white70,
+                        fontSize: 11,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500)),
+                if (port.toString().isNotEmpty)
+                  Text('Port: $port',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 9)),
+              ],
+            ),
+          ),
+          if (isSelected)
+            const Icon(Icons.check_circle,
+                color: Color(0xFF66BB6A), size: 16),
+        ]),
       ),
     );
   }
@@ -863,7 +1372,7 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
         iconColor = const Color(0xFF66BB6A);
         textColor = const Color(0xFFA5D6A7);
         statusIcon = Icons.check_circle_outline;
-        headline = 'Printer Connected';
+        headline = 'USB Printer Ready';
         break;
       case PrinterStatus.error:
         bg = const Color(0xFF7F0000).withOpacity(0.35);
@@ -871,7 +1380,7 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
         iconColor = const Color(0xFFEF5350);
         textColor = const Color(0xFFEF9A9A);
         statusIcon = Icons.error_outline;
-        headline = 'Connection Failed';
+        headline = 'No Printer Found';
         break;
       case PrinterStatus.checking:
         bg = const Color(0xFF212121).withOpacity(0.4);
@@ -879,15 +1388,15 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
         iconColor = Colors.orange;
         textColor = Colors.orange.shade200;
         statusIcon = Icons.autorenew;
-        headline = 'Checking…';
+        headline = 'Scanning…';
         break;
       default:
         bg = const Color(0xFF212121).withOpacity(0.3);
         border = Colors.white12;
         iconColor = Colors.white38;
         textColor = Colors.white54;
-        statusIcon = Icons.print_outlined;
-        headline = 'Status Unknown';
+        statusIcon = Icons.usb;
+        headline = 'Not Checked';
     }
 
     return AnimatedContainer(
@@ -909,9 +1418,9 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             : Icon(statusIcon, color: iconColor, size: 22),
         const SizedBox(width: 10),
         Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(headline,
                   style: TextStyle(
                       color: textColor,
@@ -920,96 +1429,15 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
               const SizedBox(height: 3),
               Text(_statusMessage,
                   style: TextStyle(
-                      color: textColor.withOpacity(0.75), fontSize: 10),
-                  maxLines: 3,
+                      color: textColor.withOpacity(0.75),
+                      fontSize: 10),
+                  maxLines: 5,
                   overflow: TextOverflow.ellipsis),
-            ])),
+            ],
+          ),
+        ),
       ]),
     );
-  }
-
-  Widget _buildPrinterTypeSelector() {
-    return Row(children: [
-      _typeChip('USB', Icons.usb),
-      const SizedBox(width: 6),
-      _typeChip('Network', Icons.wifi),
-      const SizedBox(width: 6),
-      _typeChip('Bluetooth', Icons.bluetooth),
-    ]);
-  }
-
-  Widget _typeChip(String type, IconData icon) {
-    final active = _printerType == type;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() {
-          _printerType = type;
-          _printerStatus = PrinterStatus.unknown;
-          _statusMessage = 'Press "Check Connection" to test your printer.';
-        }),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: active
-                ? const Color(0xFF1565C0)
-                : Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: active
-                  ? const Color(0xFF42A5F5)
-                  : Colors.white.withOpacity(0.12),
-            ),
-          ),
-          child: Column(children: [
-            Icon(icon, color: active ? Colors.white : Colors.white38, size: 18),
-            const SizedBox(height: 4),
-            Text(type,
-                style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : Colors.white38)),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label,
-          style: const TextStyle(
-              color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 5),
-      Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
-        ),
-        child: TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle:
-                TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 11),
-            prefixIcon: Icon(icon, color: Colors.white38, size: 16),
-            border: InputBorder.none,
-            contentPadding:
-                const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-            isDense: true,
-          ),
-        ),
-      ),
-    ]);
   }
 
   Widget _buildCheckButton() {
@@ -1021,21 +1449,26 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
               height: 14,
               child: CircularProgressIndicator(
                   strokeWidth: 2, color: Colors.white))
-          : const Icon(Icons.wifi_tethering, size: 16),
-      label: Text(_isChecking ? 'Checking…' : 'Check Connection',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          : const Icon(Icons.search, size: 16),
+      label: Text(
+          _isChecking ? 'Scanning…' : 'Scan for USB Printers',
+          style: const TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700)),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF00695C),
         foregroundColor: Colors.white,
         disabledBackgroundColor: Colors.grey.shade700,
+        minimumSize: const Size(double.infinity, 44),
         padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8)),
         elevation: 0,
       ),
     );
   }
 
-  Widget _paperSizeBtn(String label, int idx, {String subtitle = ''}) {
+  Widget _paperSizeBtn(String label, int idx,
+      {String subtitle = ''}) {
     final active = _selectedTab == idx;
     return GestureDetector(
       onTap: () => _switchTab(idx),
@@ -1055,7 +1488,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
         ),
         child: Column(children: [
           Icon(Icons.receipt_long,
-              color: active ? Colors.white : Colors.white38, size: 18),
+              color: active ? Colors.white : Colors.white38,
+              size: 18),
           const SizedBox(height: 4),
           Text(label,
               style: TextStyle(
@@ -1065,29 +1499,36 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           Text(subtitle,
               style: TextStyle(
                   fontSize: 8,
-                  color: active ? Colors.white60 : Colors.white24)),
+                  color:
+                      active ? Colors.white60 : Colors.white24)),
         ]),
       ),
     );
   }
 
-  Widget _buildInfoBox({required IconData icon, required String text}) {
+  Widget _buildInfoBox(
+      {required IconData icon, required String text}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border:
+            Border.all(color: Colors.white.withOpacity(0.12)),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: Colors.white38, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text,
-              style: const TextStyle(
-                  color: Colors.white54, fontSize: 10, height: 1.5)),
-        ),
-      ]),
+      child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white38, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(text,
+                  style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 10,
+                      height: 1.5)),
+            ),
+          ]),
     );
   }
 
@@ -1100,6 +1541,9 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             letterSpacing: 1.2));
   }
 
+  // ═══════════════════════════════════════════════════════
+  // ACTION PANEL
+  // ═══════════════════════════════════════════════════════
   Widget _buildActionPanel() {
     return Container(
       key: const ValueKey('action_panel'),
@@ -1115,7 +1559,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.06),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.1)),
             ),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1127,22 +1572,28 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1)),
                   const SizedBox(height: 10),
-                  _summaryRow('Items', '${widget.cartItems.length}'),
+                  _summaryRow(
+                      'Items', '${widget.cartItems.length}'),
                   _summaryRow('Qty', '$_totalQty'),
                   const SizedBox(height: 8),
                   const Divider(color: Colors.white12, height: 1),
                   const SizedBox(height: 8),
-                  _summaryRow('Sale Amt', 'Rs.${_numFmt.format(_saleAmount)}',
+                  _summaryRow('Sale Amt',
+                      'Rs.${_numFmt.format(_saleAmount)}',
                       highlight: true),
                   if (_prevBalance > 0)
-                    _summaryRow('Prev Bal', 'Rs.${_numFmt.format(_prevBalance)}',
+                    _summaryRow('Prev Bal',
+                        'Rs.${_numFmt.format(_prevBalance)}',
                         warn: true),
-                  _summaryRow('Total Due', 'Rs.${_numFmt.format(_totalDue)}',
+                  _summaryRow(
+                      'Total Due',
+                      'Rs.${_numFmt.format(_totalDue)}',
                       highlight: true),
                   const SizedBox(height: 8),
                   const Divider(color: Colors.white12, height: 1),
                   const SizedBox(height: 8),
-                  _summaryRow('Paid', 'Rs.${_numFmt.format(_amountPaid)}'),
+                  _summaryRow(
+                      'Paid', 'Rs.${_numFmt.format(_amountPaid)}'),
                   _summaryRow(
                     _remaining >= 0 ? 'Balance' : 'Change',
                     'Rs.${_numFmt.format(_remaining.abs())}',
@@ -1166,44 +1617,53 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           ]),
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () => setState(() => _showPrinterSettings = true),
+            onTap: () =>
+                setState(() => _showPrinterSettings = true),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.1)),
               ),
               child: Row(children: [
                 _statusDot(),
                 const SizedBox(width: 8),
                 Expanded(
                     child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
-                      const Text('Printer',
+                      const Text('USB PRINTER',
                           style: TextStyle(
                               color: Colors.white54,
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.8)),
-                      Text(_printerStatusLabel(),
+                      Text(
+                          _selectedPrinterName ??
+                              _printerStatusLabel(),
                           style: TextStyle(
                               color: _printerStatusColor(),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
                     ])),
-                const Icon(Icons.settings, color: Colors.white24, size: 14),
+                const Icon(Icons.settings,
+                    color: Colors.white24, size: 14),
               ]),
             ),
           ),
           const SizedBox(height: 24),
           const Spacer(),
           ElevatedButton.icon(
-            onPressed: _handleActualPrinting, // UPDATED: Use new method
+            onPressed: _handleActualPrinting,
             icon: const Icon(Icons.print, size: 18),
             label: const Text('Print Now',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1976D2),
               foregroundColor: Colors.white,
@@ -1218,12 +1678,14 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             onPressed: () => Navigator.pop(context),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white60,
-              side: BorderSide(color: Colors.white.withOpacity(0.2)),
+              side:
+                  BorderSide(color: Colors.white.withOpacity(0.2)),
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Cancel', style: TextStyle(fontSize: 13)),
+            child:
+                const Text('Cancel', style: TextStyle(fontSize: 13)),
           ),
           const SizedBox(height: 8),
         ],
@@ -1249,13 +1711,13 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   String _printerStatusLabel() {
     switch (_printerStatus) {
       case PrinterStatus.connected:
-        return 'Connected ($_printerType)';
+        return 'USB Connected';
       case PrinterStatus.disconnected:
         return 'Disconnected';
       case PrinterStatus.error:
         return 'Error – Tap to fix';
       case PrinterStatus.checking:
-        return 'Checking…';
+        return 'Scanning…';
       default:
         return 'Tap to configure';
     }
@@ -1276,23 +1738,30 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   }
 
   Widget _summaryRow(String label, String value,
-      {bool highlight = false, bool warn = false, bool good = false}) {
+      {bool highlight = false,
+      bool warn = false,
+      bool good = false}) {
     Color valueColor = Colors.white70;
     if (highlight) valueColor = Colors.white;
     if (warn) valueColor = const Color(0xFFEF5350);
     if (good) valueColor = const Color(0xFF66BB6A);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.5),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10, color: Colors.white.withOpacity(0.5))),
-        Text(value,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
-                color: valueColor)),
-      ]),
+      child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white.withOpacity(0.5))),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: highlight
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    color: valueColor)),
+          ]),
     );
   }
 
@@ -1302,7 +1771,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
       onTap: () => _switchTab(idx),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: active
               ? const Color(0xFF1976D2)
@@ -1322,17 +1792,22 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     );
   }
 
+  // ═══════════════════════════════════════════════════════
+  // PAPER PREVIEW AREA
+  // ═══════════════════════════════════════════════════════
   Widget _buildPaperArea() {
     return Stack(
       children: [
         Positioned.fill(child: _DotBackground()),
         Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+                vertical: 32, horizontal: 30),
             child: FadeTransition(
               opacity: _fadeAnim,
-              child:
-                  _selectedTab == 0 ? _build3InchSlip() : _build6InchSlip(),
+              child: _selectedTab == 0
+                  ? _build3InchSlip()
+                  : _build6InchSlip(),
             ),
           ),
         ),
@@ -1340,6 +1815,9 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     );
   }
 
+  // ═══════════════════════════════════════════════════════
+  // 3-INCH SLIP
+  // ═══════════════════════════════════════════════════════
   Widget _build3InchSlip() {
     return _SlipWrapper(
       width: 290,
@@ -1395,7 +1873,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           _s3Row('Total Due', _rs(_totalDue), bold: true),
           _sDash(dash: '-'),
         ],
-        _s3Row('Paid (${widget.paymentMethod})', _rs(_amountPaid), bold: true),
+        _s3Row('Paid (${widget.paymentMethod})', _rs(_amountPaid),
+            bold: true),
         if (_remaining > 0)
           _s3Highlight('BALANCE DUE', _rs(_remaining))
         else if (_remaining < 0)
@@ -1405,16 +1884,23 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           _s3Text('*** FULLY PAID — THANK YOU ***',
               bold: true, center: true, size: 10),
         _sDash(ch: '='),
-        _s3Text('Items: ${widget.cartItems.length}  |  Qty: $_totalQty',
-            center: true, size: 9),
+        _s3Text(
+            'Items: ${widget.cartItems.length}  |  Qty: $_totalQty',
+            center: true,
+            size: 9),
         _sDash(dash: '-'),
         if (widget.shopTagline != null)
           _s3Text(widget.shopTagline!,
-              center: true, size: 9, color: Colors.grey.shade600),
+              center: true,
+              size: 9,
+              color: Colors.grey.shade600),
         _s3Text('Thank you for shopping with us!',
             bold: true, center: true, size: 10),
-        _s3Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
-            center: true, size: 9, color: Colors.grey.shade600),
+        _s3Text(
+            DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
+            center: true,
+            size: 9,
+            color: Colors.grey.shade600),
         const SizedBox(height: 8),
         _TearEdge(),
       ]),
@@ -1430,11 +1916,13 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Text(text,
-          textAlign: center ? TextAlign.center : TextAlign.left,
+          textAlign:
+              center ? TextAlign.center : TextAlign.left,
           style: TextStyle(
               fontFamily: mono ? 'Courier' : null,
               fontSize: size,
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+              fontWeight:
+                  bold ? FontWeight.w700 : FontWeight.w400,
               color: color ?? _inkColor,
               height: 1.3)),
     );
@@ -1444,41 +1932,53 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
       {bool bold = false, Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.5),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-                color: _inkColor)),
-        Text(value,
-            style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-                fontFamily: 'Courier',
-                color: valueColor ?? _inkColor)),
-      ]),
+      child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight:
+                        bold ? FontWeight.w700 : FontWeight.w400,
+                    color: _inkColor)),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight:
+                        bold ? FontWeight.w700 : FontWeight.w400,
+                    fontFamily: 'Courier',
+                    color: valueColor ?? _inkColor)),
+          ]),
     );
   }
 
   Widget _s3Highlight(String label, String value) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       color: _inkColor,
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
-        Text(value,
-            style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Courier',
-                color: Colors.white)),
-      ]),
+      child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Courier',
+                    color: Colors.white)),
+          ]),
     );
   }
 
+  // ═══════════════════════════════════════════════════════
+  // 6-INCH SLIP
+  // ═══════════════════════════════════════════════════════
   Widget _build6InchSlip() {
     const double wQty = 28;
     const double wName = 150;
@@ -1494,13 +1994,16 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             bold: true, size: 17, center: true),
         const SizedBox(height: 3),
         _s6Text(widget.shopAddress, center: true, size: 10),
-        _s6Text('Tel: ${widget.shopPhone}', center: true, size: 10),
+        _s6Text('Tel: ${widget.shopPhone}',
+            center: true, size: 10),
         _sDash(ch: '=', wide: true),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(children: [
             _metaLabel('INVOICE #'),
-            Expanded(child: _s6Text(widget.invoiceNumber, size: 10)),
+            Expanded(
+                child:
+                    _s6Text(widget.invoiceNumber, size: 10)),
             _metaLabel('DATE'),
             _s6Text(widget.date, size: 10),
           ]),
@@ -1510,7 +2013,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           child: Row(children: [
             _metaLabel('CUSTOMER'),
             Expanded(
-                child: _s6Text(widget.customerName, size: 10, bold: true)),
+                child: _s6Text(widget.customerName,
+                    size: 10, bold: true)),
           ]),
         ),
         _sDash(dash: '-', wide: true),
@@ -1538,7 +2042,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
               name: item.productName,
               tp: _numFmt.format(item.tradePrice ?? 0),
               rp: _numFmt.format(item.price),
-              dis: '${(item.discount ?? 0).toStringAsFixed(0)}%',
+              dis:
+                  '${(item.discount ?? 0).toStringAsFixed(0)}%',
               tot: _numFmt.format(lineTotal),
               wQty: wQty,
               wName: wName,
@@ -1558,23 +2063,28 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
           _s6TotalRow('Tax (5%):', '+${_rs(_tax)}',
               valueColor: Colors.teal.shade700),
         _sDash(dash: '-', wide: true),
-        _s6TotalRow('SALE AMOUNT:', _rs(_saleAmount), bold: true),
+        _s6TotalRow('SALE AMOUNT:', _rs(_saleAmount),
+            bold: true),
         _sDash(dash: '-', wide: true),
         if (_prevBalance > 0) ...[
-          _s6TotalRow('Previous Balance:', _rs(_prevBalance),
+          _s6TotalRow(
+              'Previous Balance:', _rs(_prevBalance),
               valueColor: Colors.red.shade700),
-          _s6TotalRow('TOTAL DUE:', _rs(_totalDue), bold: true),
+          _s6TotalRow('TOTAL DUE:', _rs(_totalDue),
+              bold: true),
           _sDash(dash: '-', wide: true),
         ],
         _s6TotalRow(
-            'Amount Paid (${widget.paymentMethod}):', _rs(_amountPaid),
+            'Amount Paid (${widget.paymentMethod}):',
+            _rs(_amountPaid),
             bold: true),
         _sDash(ch: '=', wide: true),
         if (_remaining > 0)
           _s6Highlight('BALANCE DUE:', _rs(_remaining))
         else if (_remaining < 0)
           _s6TotalRow('CHANGE:', _rs(_remaining.abs()),
-              bold: true, valueColor: Colors.green.shade700)
+              bold: true,
+              valueColor: Colors.green.shade700)
         else
           _s6Text('*** FULLY PAID — THANK YOU ***',
               bold: true, center: true, size: 11),
@@ -1587,11 +2097,17 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
         _sDash(ch: '=', wide: true),
         if (widget.shopTagline != null)
           _s6Text(widget.shopTagline!,
-              center: true, size: 9.5, color: Colors.grey.shade600),
+              center: true,
+              size: 9.5,
+              color: Colors.grey.shade600),
         _s6Text('Thank you for shopping with us!',
             bold: true, center: true, size: 10.5),
-        _s6Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
-            center: true, size: 9.5, color: Colors.grey.shade600),
+        _s6Text(
+            DateFormat('dd/MM/yyyy HH:mm')
+                .format(DateTime.now()),
+            center: true,
+            size: 9.5,
+            color: Colors.grey.shade600),
         const SizedBox(height: 8),
         _TearEdge(),
       ]),
@@ -1599,12 +2115,17 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   }
 
   Widget _s6Text(String text,
-      {bool bold = false, bool center = false, double size = 10, Color? color}) {
+      {bool bold = false,
+      bool center = false,
+      double size = 10,
+      Color? color}) {
     return Text(text,
-        textAlign: center ? TextAlign.center : TextAlign.left,
+        textAlign:
+            center ? TextAlign.center : TextAlign.left,
         style: TextStyle(
             fontSize: size,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+            fontWeight:
+                bold ? FontWeight.w700 : FontWeight.w400,
             color: color ?? _inkColor,
             height: 1.35));
   }
@@ -1653,16 +2174,20 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
               style: style, overflow: TextOverflow.ellipsis)),
       SizedBox(
           width: wTp,
-          child: Text(tp, style: style, textAlign: TextAlign.right)),
+          child:
+              Text(tp, style: style, textAlign: TextAlign.right)),
       SizedBox(
           width: wRp,
-          child: Text(rp, style: style, textAlign: TextAlign.right)),
+          child:
+              Text(rp, style: style, textAlign: TextAlign.right)),
       SizedBox(
           width: wDis,
-          child: Text(dis, style: style, textAlign: TextAlign.right)),
+          child:
+              Text(dis, style: style, textAlign: TextAlign.right)),
       SizedBox(
           width: wTot,
-          child: Text(tot, style: style, textAlign: TextAlign.right)),
+          child:
+              Text(tot, style: style, textAlign: TextAlign.right)),
     ]);
   }
 
@@ -1676,7 +2201,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
             child: Text(label,
                 style: TextStyle(
                     fontSize: 9.5,
-                    fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+                    fontWeight:
+                        bold ? FontWeight.w700 : FontWeight.w400,
                     color: _inkColor))),
         Expanded(
             flex: 3,
@@ -1685,7 +2211,8 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
                 style: TextStyle(
                     fontFamily: 'Courier',
                     fontSize: 9.5,
-                    fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+                    fontWeight:
+                        bold ? FontWeight.w700 : FontWeight.w400,
                     color: valueColor ?? _inkColor))),
       ]),
     );
@@ -1731,6 +2258,9 @@ class _SlipPreviewScreenState extends State<SlipPreviewScreen>
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// HELPER WIDGETS
+// ═══════════════════════════════════════════════════════════════
 class _SlipWrapper extends StatelessWidget {
   final double width;
   final Widget child;
@@ -1753,10 +2283,12 @@ class _SlipWrapper extends StatelessWidget {
               offset: const Offset(0, 2)),
         ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      child:
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _Perforation(),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: child,
         ),
       ]),
@@ -1767,7 +2299,8 @@ class _SlipWrapper extends StatelessWidget {
 class _TearEdge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CustomPaint(
-      size: const Size(double.infinity, 16), painter: _TearEdgePainter());
+      size: const Size(double.infinity, 16),
+      painter: _TearEdgePainter());
 }
 
 class _TearEdgePainter extends CustomPainter {
@@ -1781,7 +2314,8 @@ class _TearEdgePainter extends CustomPainter {
     double x = r;
     while (x < size.width) {
       canvas.drawArc(
-          Rect.fromCircle(center: Offset(x, size.height / 2), radius: r),
+          Rect.fromCircle(
+              center: Offset(x, size.height / 2), radius: r),
           0,
           3.14159,
           false,
@@ -1797,7 +2331,8 @@ class _TearEdgePainter extends CustomPainter {
 class _Perforation extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CustomPaint(
-      size: const Size(double.infinity, 18), painter: _PerforationPainter());
+      size: const Size(double.infinity, 18),
+      painter: _PerforationPainter());
 }
 
 class _PerforationPainter extends CustomPainter {
@@ -1820,7 +2355,8 @@ class _PerforationPainter extends CustomPainter {
 
 class _DotBackground extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => CustomPaint(painter: _DotPainter());
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: _DotPainter());
 }
 
 class _DotPainter extends CustomPainter {
