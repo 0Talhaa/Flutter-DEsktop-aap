@@ -62,9 +62,9 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     _nameController = TextEditingController(text: widget.customer?.name ?? '');
     _phoneController =
         TextEditingController(text: widget.customer?.phone ?? '');
-    _balanceController = TextEditingController(
-      text: widget.customer?.openingBalance.toStringAsFixed(0) ?? '0',
-    );
+    // _balanceController = TextEditingController(
+    //   text: widget.customer?.openingBalance.toStringAsFixed(0) ?? '0',
+    // );
     _addressController =
         TextEditingController(text: widget.customer?.address ?? '');
     _cityController = TextEditingController(text: widget.customer?.city ?? '');
@@ -107,7 +107,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
         id: widget.customer?.id,
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
-        openingBalance: double.tryParse(_balanceController.text) ?? 0.0,
+        // openingBalance: double.tryParse(_balanceController.text) ?? 0.0,
         address: _addressController.text.trim().isEmpty
             ? null
             : _addressController.text.trim(),
@@ -145,90 +145,153 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   }
 
   void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.1),
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ✅ Icon with gradient ring
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF10B981),
+                    Color(0xFF059669),
+                  ],
+                ),
+              ),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_circle,
-                    color: Color(0xFF10B981), size: 40),
+                child: const Icon(Icons.check_rounded,
+                    color: Color(0xFF10B981), size: 32),
               ),
-              const SizedBox(height: 16),
-              Text(
-                isEditMode ? 'Customer Updated!' : 'Customer Added!',
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B)),
+            ),
+
+            const SizedBox(height: 14),
+
+            // ✅ Title
+            Text(
+              isEditMode ? 'Updated Successfully' : 'Added Successfully',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0F172A),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _nameController.text,
-                style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+            ),
+
+            const SizedBox(height: 6),
+
+            // ✅ Subtitle (customer name)
+            Text(
+              _nameController.text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
               ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    const PremiumDashboardScreen()));
-                        // Navigator.pop(context, true);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+
+            const SizedBox(height: 18),
+
+            // ✅ Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const PremiumDashboardScreen(),
+                        ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Text('Done',
-                          style: TextStyle(color: Color(0xFF64748B))),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    child: const Text(
+                      'Done',
+                      style: TextStyle(color: Color(0xFF64748B)),
                     ),
                   ),
-                  if (!isEditMode) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
+                ),
+
+                if (!isEditMode) ...[
+                  const SizedBox(width: 10),
+
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF3B82F6),
+                            Color(0xFF2563EB),
+                          ],
+                        ),
+                      ),
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
                           _clearForm();
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          elevation: 0,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        child: const Text('Add Another',
-                            style: TextStyle(color: Colors.white)),
+                        child: const Text(
+                          'Add More',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _clearForm() {
     _nameController.clear();
@@ -246,6 +309,27 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      
+      // ✅ Back Button
+      leading: IconButton(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumDashboardScreen())),
+        icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+        color: const Color(0xFF1E293B),
+      ),
+
+      // ✅ Optional Title (agar chaho)
+      title: const Text(
+        "Customer",
+        style: TextStyle(
+          color: Color(0xFF1E293B),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      centerTitle: true,
+    ),
       backgroundColor: const Color(0xFFF8FAFC),
       body: Row(
         children: [
@@ -794,26 +878,49 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     );
   }
 
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, size: 18),
-            label: const Text('Cancel'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF64748B),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+Widget _buildActionButtons() {
+  return Row(
+    children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close, size: 18),
+          label: const Text('Cancel'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF64748B),
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            textStyle: const TextStyle(fontWeight: FontWeight.w500),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
           ),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
+      ),
+
+      const SizedBox(width: 14),
+
+      Expanded(
+        flex: 2,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF8B5CF6),
+                Color(0xFF7C3AED),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: ElevatedButton.icon(
             onPressed: _isSaving ? null : _saveCustomer,
             icon: _isSaving
@@ -821,31 +928,38 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Icon(
                     isEditMode
                         ? Icons.save_outlined
-                        : Icons.person_add_outlined,
-                    size: 18),
-            label: Text(_isSaving
-                ? 'Saving...'
-                : isEditMode
-                    ? 'Update Customer'
-                    : 'Save Customer'),
+                        : Icons.person_add_alt_1,
+                    size: 18,
+                  ),
+            label: Text(
+              _isSaving
+                  ? 'Saving...'
+                  : isEditMode
+                      ? 'Update Customer'
+                      : 'Save Customer',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B5CF6),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 15),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-              elevation: 0,
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
 
   Widget _buildPreviewCard() {
     String name =
@@ -1034,50 +1148,6 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     );
   }
 
-  // Widget _buildQuickActionsCard() {
-  //   return Container(
-  //     padding: const EdgeInsets.all(16),
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       borderRadius: BorderRadius.circular(12),
-  //       border: Border.all(color: const Color(0xFFE2E8F0)),
-  //     ),
-  //     child: Column(
-  //       crossAxisAlignment: CrossAxisAlignment.start,
-  //       children: [
-  //         const Text(
-  //           'Quick Actions',
-  //           style: TextStyle(
-  //             fontSize: 13,
-  //             fontWeight: FontWeight.w600,
-  //             color: Color(0xFF1E293B),
-  //           ),
-  //         ),
-  //         const SizedBox(height: 12),
-  //         _buildQuickActionButton(
-  //           icon: Icons.phone_outlined,
-  //           label: 'Call Customer',
-  //           color: const Color(0xFF10B981),
-  //           onTap: () {},
-  //         ),
-  //         const SizedBox(height: 8),
-  //         _buildQuickActionButton(
-  //           icon: Icons.message_outlined,
-  //           label: 'Send SMS',
-  //           color: const Color(0xFF3B82F6),
-  //           onTap: () {},
-  //         ),
-  //         const SizedBox(height: 8),
-  //         _buildQuickActionButton(
-  //           icon: Icons.history_outlined,
-  //           label: 'View History',
-  //           color: const Color(0xFF8B5CF6),
-  //           onTap: () {},
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   Widget _buildQuickActionButton({
     required IconData icon,
@@ -1118,51 +1188,6 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     );
   }
 
-  // Widget _buildTipsCard() {
-  //   return Container(
-  //     decoration: BoxDecoration(
-  //       color: const Color(0xFFEFF6FF),
-  //       borderRadius: BorderRadius.circular(12),
-  //       border: Border.all(color: const Color(0xFFBFDBFE)),
-  //     ),
-  //     child: Padding(
-  //       padding: const EdgeInsets.all(16),
-  //       child: Column(
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         children: [
-  //           Row(
-  //             children: [
-  //               Container(
-  //                 width: 28,
-  //                 height: 28,
-  //                 decoration: BoxDecoration(
-  //                   color: const Color(0xFF3B82F6).withOpacity(0.2),
-  //                   borderRadius: BorderRadius.circular(6),
-  //                 ),
-  //                 child: const Icon(Icons.lightbulb_outline, size: 16, color: Color(0xFF3B82F6)),
-  //               ),
-  //               const SizedBox(width: 10),
-  //               const Text(
-  //                 'Quick Tips',
-  //                 style: TextStyle(
-  //                   fontSize: 13,
-  //                   fontWeight: FontWeight.w600,
-  //                   color: Color(0xFF1E40AF),
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //           const SizedBox(height: 16),
-  //           _buildTipItem('Add phone number for SMS notifications'),
-  //           _buildTipItem('Set opening balance for credit customers'),
-  //           _buildTipItem('Add address for delivery orders'),
-  //           _buildTipItem('Use customer type for better reporting'),
-  //           _buildTipItem('Email is useful for sending invoices'),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
 
   Widget _buildTipItem(String text) {
     return Padding(

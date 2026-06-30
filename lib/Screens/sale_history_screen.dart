@@ -65,7 +65,7 @@ class _SaleHistoryScreenState extends State<SaleHistoryScreen> {
       (c) => c.name == customerName,
       orElse: () => Customer(name: '', phone: '', openingBalance: 0.0),
     );
-    return customer.openingBalance;
+    return customer.name.isEmpty ? 0.0 : customer.openingBalance ?? 0.0;
   }
 
   @override

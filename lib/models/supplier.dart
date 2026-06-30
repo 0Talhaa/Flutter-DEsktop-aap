@@ -7,7 +7,8 @@ class Supplier {
   final String? email;
   final String? company;
   final String? teleNumber;
-  final double openingBalance;
+  final String? address;
+  final String? city;
 
   Supplier({
     this.id,
@@ -16,7 +17,8 @@ class Supplier {
     this.email,
     this.company,
     this.teleNumber,
-    this.openingBalance = 0.0,
+    this.address,
+    this.city,
   });
 
   Map<String, dynamic> toMap() {
@@ -27,7 +29,8 @@ class Supplier {
       'email': email,
       'company': company,
       'teleNumber': teleNumber,
-      'openingBalance': openingBalance,
+      'address': address,
+      'city': city,
     };
   }
 
@@ -39,12 +42,11 @@ class Supplier {
       email: map['email'] as String?,
       company: map['company'] as String?,
       teleNumber: map['teleNumber'] as String?,
-      openingBalance: (map['openingBalance'] as num?)?.toDouble() ?? 0.0,
+      address: map['address'] as String?,
+      city: map['city'] as String?,
     );
   }
 
-  // ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-  // یہ copyWith method add کریں
   Supplier copyWith({
     int? id,
     String? name,
@@ -52,7 +54,8 @@ class Supplier {
     String? email,
     String? company,
     String? teleNumber,
-    double? openingBalance,
+    String? address,
+    String? city,
   }) {
     return Supplier(
       id: id ?? this.id,
@@ -61,8 +64,8 @@ class Supplier {
       email: email ?? this.email,
       company: company ?? this.company,
       teleNumber: teleNumber ?? this.teleNumber,
-      openingBalance: openingBalance ?? this.openingBalance,
+      address: address ?? this.address,
+      city: city ?? this.city,
     );
   }
-  // ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 }

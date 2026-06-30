@@ -84,10 +84,10 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     // Apply filter
     switch (_selectedFilter) {
       case 'With Balance':
-        filtered = filtered.where((c) => c.openingBalance > 0).toList();
+        filtered = filtered.where((c) => c.openingBalance! > 0).toList();
         break;
       case 'No Balance':
-        filtered = filtered.where((c) => c.openingBalance <= 0).toList();
+        filtered = filtered.where((c) => c.openingBalance! <= 0).toList();
         break;
       case 'Recent':
         filtered.sort((a, b) => (b.id ?? 0).compareTo(a.id ?? 0));
@@ -102,8 +102,8 @@ class _CustomerListScreenState extends State<CustomerListScreen>
           case 'name':
             comparison = a.name.compareTo(b.name);
             break;
-          case 'balance':
-            comparison = a.openingBalance.compareTo(b.openingBalance);
+          // case 'balance':
+          //   comparison = a.openingBalance.compareTo(b.openingBalance);
             break;
           case 'city':
             comparison = (a.city ?? '').compareTo(b.city ?? '');
@@ -150,61 +150,61 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     }
   }
 
-  Future<void> _deleteCustomer(Customer customer) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.delete_outline,
-                  color: Colors.red.shade600, size: 24),
-            ),
-            const SizedBox(width: 12),
-            const Text('Delete Customer'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete "${customer.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  // Future<void> _deleteCustomer(Customer customer) async {
+  //   final confirm = await showDialog<bool>(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  //       title: Row(
+  //         children: [
+  //           Container(
+  //             padding: const EdgeInsets.all(8),
+  //             decoration: BoxDecoration(
+  //               color: Colors.red.shade50,
+  //               borderRadius: BorderRadius.circular(8),
+  //             ),
+  //             child: Icon(Icons.delete_outline,
+  //                 color: Colors.red.shade600, size: 24),
+  //           ),
+  //           const SizedBox(width: 12),
+  //           const Text('Delete Customer'),
+  //         ],
+  //       ),
+  //       content: Text(
+  //         'Are you sure you want to delete "${customer.name}"? This action cannot be undone.',
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context, false),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () => Navigator.pop(context, true),
+  //           style: ElevatedButton.styleFrom(
+  //             backgroundColor: Colors.red,
+  //             foregroundColor: Colors.white,
+  //           ),
+  //           child: const Text('Delete'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
 
-    if (confirm == true) {
-      try {
-        await DatabaseHelper.instance.deleteCustomer(customer.id!);
-        _loadCustomers();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${customer.name} deleted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        _showErrorSnackBar('Failed to delete customer: $e');
-      }
-    }
-  }
+  //   if (confirm == true) {
+  //     try {
+  //       await DatabaseHelper.instance.deleteCustomer(customer.id!);
+  //       _loadCustomers();
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('${customer.name} deleted successfully'),
+  //           backgroundColor: Colors.green,
+  //         ),
+  //       );
+  //     } catch (e) {
+  //       _showErrorSnackBar('Failed to delete customer: $e');
+  //     }
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -291,7 +291,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                 ),
               ),
               // Stats Cards
-              if (isDesktop) ..._buildStatsCards(),
+              // if (isDesktop) ..._buildStatsCards(),
             ],
           ),
           const SizedBox(height: 20),
@@ -302,36 +302,36 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     );
   }
 
-  List<Widget> _buildStatsCards() {
-    final totalBalance = _customers.fold<double>(
-      0,
-      (sum, c) => sum + c.openingBalance,
-    );
-    final withBalance = _customers.where((c) => c.openingBalance > 0).length;
+  // List<Widget> _buildStatsCards() {
+  //   final totalBalance = _customers.fold<double>(
+  //     0,
+  //     (sum, c) => sum + c.openingBalance,
+  //   );
+  //   final withBalance = _customers.where((c) => c.openingBalance > 0).length;
 
-    return [
-      _buildStatCard(
-        'Total Balance',
-        'Rs. ${totalBalance.toStringAsFixed(0)}',
-        Icons.account_balance_wallet_outlined,
-        const Color(0xFF10B981),
-      ),
-      const SizedBox(width: 12),
-      _buildStatCard(
-        'With Balance',
-        withBalance.toString(),
-        Icons.warning_amber_outlined,
-        const Color(0xFFF59E0B),
-      ),
-      const SizedBox(width: 12),
-      _buildStatCard(
-        'Active',
-        _customers.length.toString(),
-        Icons.check_circle_outline,
-        const Color(0xFF3B82F6),
-      ),
-    ];
-  }
+  //   return [
+  //     _buildStatCard(
+  //       'Total Balance',
+  //       'Rs. ${totalBalance.toStringAsFixed(13)}',
+  //       Icons.account_balance_wallet_outlined,
+  //       const Color(0xFF10B981),
+  //     ),
+  //     const SizedBox(width: 12),
+  //     _buildStatCard(
+  //       'With Balance',
+  //       withBalance.toString(),
+  //       Icons.warning_amber_outlined,
+  //       const Color(0xFFF59E0B),
+  //     ),
+  //     const SizedBox(width: 12),
+  //     _buildStatCard(
+  //       'Active',
+  //       _customers.length.toString(),
+  //       Icons.check_circle_outline,
+  //       const Color(0xFF3B82F6),
+  //     ),
+  //   ];
+  // }
 
   Widget _buildStatCard(
       String title, String value, IconData icon, Color color) {
@@ -750,26 +750,26 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                         ),
                       ),
                       // Balance
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: customer.openingBalance > 0
-                              ? const Color(0xFFFEF3C7)
-                              : const Color(0xFFD1FAE5),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: customer.openingBalance > 0
-                                ? const Color(0xFFF59E0B)
-                                : const Color(0xFF10B981),
-                          ),
-                        ),
-                      ),
+                     // Container(
+                      //  padding: const EdgeInsets.symmetric(
+                          //  horizontal: 12, vertical: 6),
+                        // decoration: BoxDecoration(
+                        //   color: customer.openingBalance > 0
+                        //       ? const Color(0xFFFEF3C7)
+                        //       : const Color(0xFFD1FAE5),
+                        //   borderRadius: BorderRadius.circular(20),
+                        // ),
+                        // child: Text(
+                        //   'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
+                        //   style: TextStyle(
+                        //     fontSize: 13,
+                        //     fontWeight: FontWeight.w600,
+                        //     color: customer.openingBalance > 0
+                        //         ? const Color(0xFFF59E0B)
+                        //         : const Color(0xFF10B981),
+                        //   ),
+                        // ),
+                    //  ),
                       // Actions
                       PopupMenuButton<String>(
                         icon: Icon(Icons.more_vert, color: Colors.grey.shade500),
@@ -778,9 +778,9 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                             case 'edit':
                               _navigateToAddCustomer(customer);
                               break;
-                            case 'delete':
-                              _deleteCustomer(customer);
-                              break;
+                            // case 'delete':
+                            //   _deleteCustomer(customer);
+                            //   break;
                           }
                         },
                         itemBuilder: (context) => [
@@ -925,7 +925,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                           ),
                         ),
                       ),
-                      if (customer.openingBalance > 0)
+                      if (customer.openingBalance! < 0)
                         Positioned(
                           right: -4,
                           top: -4,
@@ -973,27 +973,27 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                     ),
                   const Spacer(),
                   // Balance
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: customer.openingBalance > 0
-                          ? const Color(0xFFFEF3C7)
-                          : const Color(0xFFD1FAE5),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: customer.openingBalance > 0
-                            ? const Color(0xFFF59E0B)
-                            : const Color(0xFF10B981),
-                      ),
-                    ),
-                  ),
+                  // Container(
+                  //   width: double.infinity,
+                  //   padding: const EdgeInsets.symmetric(vertical: 8),
+                  //   decoration: BoxDecoration(
+                  //     color: customer.openingBalance > 0
+                  //         ? const Color(0xFFFEF3C7)
+                  //         : const Color(0xFFD1FAE5),
+                  //     borderRadius: BorderRadius.circular(10),
+                  //   ),
+                  //   // child: Text(
+                  //   //   'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
+                  //   //   textAlign: TextAlign.center,
+                  //   //   style: TextStyle(
+                  //   //     fontSize: 13,
+                  //   //     fontWeight: FontWeight.w600,
+                  //   //     color: customer.openingBalance > 0
+                  //   //         ? const Color(0xFFF59E0B)
+                  //   //         : const Color(0xFF10B981),
+                  //   //   ),
+                  //   // ),
+                  // ),
                   // Pay button — shown when this card is selected
                   if (_selectedCustomerId == customer.id) ...[
                     const SizedBox(height: 8),
@@ -1042,7 +1042,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CustomerPaymentScreen(customer: customer),
+        builder: (_) => CustomerPaymentByInvoiceScreen(),
       ),
     ).then((_) => _loadCustomers());
   }
@@ -1052,7 +1052,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CustomerPaymentScreen(customer: customer),
+          builder: (_) => CustomerPaymentByInvoiceScreen(),
         ),
       ).then((_) => _loadCustomers());
       return;
@@ -1067,10 +1067,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
           Navigator.pop(context);
           _navigateToAddCustomer(customer);
         },
-        onDelete: () {
-          Navigator.pop(context);
-          _deleteCustomer(customer);
-        },
+        
       ),
     );
   }
@@ -1093,12 +1090,12 @@ class _CustomerListScreenState extends State<CustomerListScreen>
 class _CustomerDetailSheet extends StatelessWidget {
   final Customer customer;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  // final VoidCallback onDelete;
 
   const _CustomerDetailSheet({
     required this.customer,
     required this.onEdit,
-    required this.onDelete,
+    // required this.onDelete,
   });
 
   @override
@@ -1186,58 +1183,58 @@ class _CustomerDetailSheet extends StatelessWidget {
                       Icons.credit_card_outlined, 'CNIC', customer.cnic!),
                 const SizedBox(height: 16),
                 // Balance Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: customer.openingBalance > 0
-                        ? const Color(0xFFFEF3C7)
-                        : const Color(0xFFD1FAE5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Current Balance',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: customer.openingBalance > 0
-                              ? const Color(0xFFF59E0B)
-                              : const Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Container(
+                //   width: double.infinity,
+                //   padding: const EdgeInsets.all(16),
+                //   decoration: BoxDecoration(
+                //     color: customer.openingBalance > 0
+                //         ? const Color(0xFFFEF3C7)
+                //         : const Color(0xFFD1FAE5),
+                //     borderRadius: BorderRadius.circular(16),
+                //   ),
+                  // child: Row(
+                  //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //   children: [
+                  //     // const Text(
+                  //     //   'Current Balance',
+                  //     //   style: TextStyle(
+                  //     //     fontSize: 14,
+                  //     //     fontWeight: FontWeight.w500,
+                  //     //   ),
+                  //     // ),
+                  //     // Text(
+                  //     //   'Rs. ${customer.openingBalance.toStringAsFixed(0)}',
+                  //     //   style: TextStyle(
+                  //     //     fontSize: 20,
+                  //     //     fontWeight: FontWeight.w700,
+                  //     //     color: customer.openingBalance > 0
+                  //     //         ? const Color(0xFFF59E0B)
+                  //     //         : const Color(0xFF10B981),
+                  //     //   ),
+                  //     // ),
+                  //   ],
+                  // ),
+                // ),
                 const SizedBox(height: 24),
                 // Action Buttons
                 Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onDelete,
-                        icon:
-                            const Icon(Icons.delete_outline, color: Colors.red),
-                        label: const Text('Delete',
-                            style: TextStyle(color: Colors.red)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: const BorderSide(color: Colors.red),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
+                    // Expanded(
+                    //   child: OutlinedButton.icon(
+                    //     onPressed: onDelete,
+                    //     icon:
+                    //         const Icon(Icons.delete_outline, color: Colors.red),
+                    //     label: const Text('Delete',
+                    //         style: TextStyle(color: Colors.red)),
+                    //     style: OutlinedButton.styleFrom(
+                    //       padding: const EdgeInsets.symmetric(vertical: 12),
+                    //       side: const BorderSide(color: Colors.red),
+                    //       shape: RoundedRectangleBorder(
+                    //         borderRadius: BorderRadius.circular(12),
+                    //       ),
+                    //     ),
+                    //   ),
+                    // ),
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 2,

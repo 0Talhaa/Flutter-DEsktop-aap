@@ -4,7 +4,7 @@ class Customer {
   final int? id;
   final String name;
   final String phone;
-  final double openingBalance;
+  final double? openingBalance;
   final String? address;
   final String? city;
   final String? email;
@@ -55,7 +55,7 @@ class Customer {
     int? id,
     String? name,
     String? phone,
-    double? openingBalance,
+    // double? openingBalance,
     String? address,
     String? city,
     String? email,
@@ -66,7 +66,7 @@ class Customer {
       id: id ?? this.id,
       name: name ?? this.name,
       phone: phone ?? this.phone,
-      openingBalance: openingBalance ?? this.openingBalance,
+      // openingBalance: openingBalance ?? this.openingBalance,
       address: address ?? this.address,
       city: city ?? this.city,
       email: email ?? this.email,

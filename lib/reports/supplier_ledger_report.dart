@@ -1,4 +1,5 @@
 // lib/screens/supplier_ledger_report.dart
+// ✅ FIXED VERSION - Invoice by Invoice Display + Correct Balance Calculation
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +24,7 @@ class _SupplierLedgerReportState extends State<SupplierLedgerReport> {
   List<LedgerEntry> ledgerEntries = [];
   bool isLoading = false;
   bool isSuppliersLoading = true;
-  bool showFullScreen = false; // New flag to control full screen view
+  bool showFullScreen = false;
 
   // Metrics
   double reportOpeningBalance = 0.0;
@@ -34,11 +35,11 @@ class _SupplierLedgerReportState extends State<SupplierLedgerReport> {
   final currencyFormat = NumberFormat.currency(locale: 'en_PK', symbol: 'Rs. ', decimalDigits: 0);
   final dateFormat = DateFormat('dd MMM yyyy');
 
-@override
-void initState() {
-  super.initState();
-  _loadSuppliers();
-}
+  @override
+  void initState() {
+    super.initState();
+    _loadSuppliers();
+  }
 
   Future<void> _loadSuppliers() async {
     try {
@@ -60,91 +61,187 @@ void initState() {
 
     setState(() => isLoading = true);
 
-    // Ensure toDate includes the entire day
     final fromDateStr = DateTime(fromDate.year, fromDate.month, fromDate.day).toIso8601String();
     final toDateStr = DateTime(toDate.year, toDate.month, toDate.day, 23, 59, 59).toIso8601String();
 
     try {
-      // 1. Calculate Opening Balance (balance before fromDate)
-      reportOpeningBalance = await DatabaseHelper.instance.getSupplierBalanceAtDate(
-        supplierName: selectedSupplier!.name,
-        initialOpeningBalance: selectedSupplier!.openingBalance,
-        beforeDate: fromDateStr,
+      debugPrint('═══════════════════════════════════════════════════════════');
+      debugPrint('📊 GENERATING LEDGER FOR: ${selectedSupplier!.name}');
+      debugPrint('📅 Period: ${dateFormat.format(fromDate)} to ${dateFormat.format(toDate)}');
+      debugPrint('═══════════════════════════════════════════════════════════');
+
+      // ✅ STEP 1: Calculate Opening Balance (invoices BEFORE fromDate)
+      reportOpeningBalance = await _getOpeningBalance(fromDateStr);
+      debugPrint('💰 Opening Balance (before ${dateFormat.format(fromDate)}): ${currencyFormat.format(reportOpeningBalance)}');
+
+      // ✅ STEP 2: Get all purchases in date range
+      final db = await DatabaseHelper.instance.database;
+      final purchases = await db.query(
+        'purchases',
+        where: 'supplierId = ? AND date BETWEEN ? AND ?',
+        whereArgs: [selectedSupplier!.id, fromDateStr, toDateStr],
+        orderBy: 'date ASC',
       );
 
-      // 2. Fetch Purchases in date range
-      final purchases = await DatabaseHelper.instance.getSupplierLedgerData(
-        supplierId: selectedSupplier!.id!,
-        supplierName: selectedSupplier!.name,
-        fromDate: fromDateStr,
-        toDate: toDateStr,
-      );
+      debugPrint('📦 Found ${purchases.length} purchases in period');
 
-      // 3. Process Transactions
       List<LedgerEntry> tempEntries = [];
       totalPurchased = 0;
       totalPaid = 0;
 
-      for (var p in purchases) {
-        final date = DateTime.parse(p['date']);
-        final invoiceNumber = p['invoiceNumber'] ?? 'N/A';
-        final totalAmount = (p['totalAmount'] as num?)?.toDouble() ?? 0.0;
-        final amountPaid = (p['amountPaid'] as num?)?.toDouble() ?? 0.0;
+      // ✅ STEP 3: Process each invoice
+      for (var purchase in purchases) {
+        final purchaseId = purchase['id'] as int;
+        final date = DateTime.parse(purchase['date'] as String);
+        final invoiceNumber = purchase['invoiceNumber'] as String;
+        final totalAmount = (purchase['totalAmount'] as num).toDouble();
+        final amountPaid = (purchase['amountPaid'] as num).toDouble();
+        final balance = (purchase['balance'] as num).toDouble();
 
-        // Add PURCHASE entry (Debit - increases balance)
+        debugPrint('──────────────────────────────────────────────────────────');
+        debugPrint('Invoice: $invoiceNumber (ID: $purchaseId)');
+        debugPrint('  Date: ${dateFormat.format(date)}');
+        debugPrint('  Total: ${currencyFormat.format(totalAmount)}');
+        debugPrint('  Paid with Invoice: ${currencyFormat.format(amountPaid)}');
+        debugPrint('  Balance: ${currencyFormat.format(balance)}');
+
+        // ✅ Add PURCHASE entry (Debit - increases balance)
         tempEntries.add(LedgerEntry(
           date: date,
           description: 'Purchase Invoice #$invoiceNumber',
+          invoiceNumber: invoiceNumber,
           debit: totalAmount,
           credit: 0.0,
           type: LedgerEntryType.purchase,
           referenceNo: invoiceNumber,
+          purchaseId: purchaseId,
         ));
         totalPurchased += totalAmount;
 
-        // Add PAYMENT entry if payment was made (Credit - decreases balance)
-        if (amountPaid > 0) {
+        // ✅ Get ALL payments for this specific invoice
+        final payments = await db.query(
+          'supplier_payments',
+          where: 'purchaseId = ?',
+          whereArgs: [purchaseId],
+          orderBy: 'date ASC',
+        );
+
+        debugPrint('  💳 Found ${payments.length} payment(s) for this invoice:');
+
+        double totalPaymentsForInvoice = 0;
+        for (var payment in payments) {
+          final paymentDate = DateTime.parse(payment['date'] as String);
+          final paymentAmount = (payment['amount'] as num).toDouble();
+          final paymentMethod = payment['paymentMethod'] as String? ?? 'Cash';
+          
+          totalPaymentsForInvoice += paymentAmount;
+          
+          debugPrint('     - ${dateFormat.format(paymentDate)}: ${currencyFormat.format(paymentAmount)} ($paymentMethod)');
+
+          // Add payment entry
           tempEntries.add(LedgerEntry(
-            date: date,
+            date: paymentDate,
             description: 'Payment for Invoice #$invoiceNumber',
+            invoiceNumber: invoiceNumber,
             debit: 0.0,
-            credit: amountPaid,
+            credit: paymentAmount,
             type: LedgerEntryType.payment,
-            referenceNo: invoiceNumber,
+            referenceNo: payment['reference'] as String?,
+            purchaseId: purchaseId,
+            paymentMethod: paymentMethod,
           ));
-          totalPaid += amountPaid;
+          totalPaid += paymentAmount;
         }
+
+        debugPrint('  ✅ Total Payments for $invoiceNumber: ${currencyFormat.format(totalPaymentsForInvoice)}');
+        debugPrint('  📊 Remaining Balance: ${currencyFormat.format(totalAmount - totalPaymentsForInvoice)}');
       }
 
-      // 4. Sort by Date (and keep purchase before payment on same date)
+      // ✅ STEP 4: Sort all entries by date
       tempEntries.sort((a, b) {
         int dateCompare = a.date.compareTo(b.date);
         if (dateCompare != 0) return dateCompare;
-        // On same date, show purchase before payment
+        // Same date: purchase before payment
         if (a.type == LedgerEntryType.purchase && b.type == LedgerEntryType.payment) return -1;
         if (a.type == LedgerEntryType.payment && b.type == LedgerEntryType.purchase) return 1;
         return 0;
       });
 
-      // 5. Calculate Running Balance
+      // ✅ STEP 5: Calculate running balance
       double runningBalance = reportOpeningBalance;
+      debugPrint('\n🔄 CALCULATING RUNNING BALANCE:');
+      debugPrint('   Starting Balance: ${currencyFormat.format(runningBalance)}');
+
       for (var entry in tempEntries) {
         runningBalance = runningBalance + entry.debit - entry.credit;
         entry.balance = runningBalance;
+        
+        if (entry.type == LedgerEntryType.purchase) {
+          debugPrint('   📦 ${entry.invoiceNumber}: +${currencyFormat.format(entry.debit)} → ${currencyFormat.format(runningBalance)}');
+        } else {
+          debugPrint('   💳 Payment for ${entry.invoiceNumber}: -${currencyFormat.format(entry.credit)} → ${currencyFormat.format(runningBalance)}');
+        }
       }
 
       closingBalance = runningBalance;
 
+      debugPrint('\n═══════════════════════════════════════════════════════════');
+      debugPrint('📊 LEDGER SUMMARY:');
+      debugPrint('   Opening Balance: ${currencyFormat.format(reportOpeningBalance)}');
+      debugPrint('   Total Purchased: ${currencyFormat.format(totalPurchased)}');
+      debugPrint('   Total Paid: ${currencyFormat.format(totalPaid)}');
+      debugPrint('   Closing Balance: ${currencyFormat.format(closingBalance)}');
+      debugPrint('   Formula Check: ${currencyFormat.format(reportOpeningBalance)} + ${currencyFormat.format(totalPurchased)} - ${currencyFormat.format(totalPaid)} = ${currencyFormat.format(reportOpeningBalance + totalPurchased - totalPaid)}');
+      debugPrint('═══════════════════════════════════════════════════════════');
+
       setState(() {
         ledgerEntries = tempEntries;
         isLoading = false;
-        showFullScreen = true; // Switch to full screen view
+        showFullScreen = true;
       });
 
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => isLoading = false);
+      debugPrint('❌ Error generating ledger: $e');
+      debugPrint('Stack trace: $stackTrace');
       _showErrorSnackBar('Error generating ledger: $e');
     }
+  }
+
+  /// ✅ Calculate opening balance from invoices BEFORE the report start date
+  Future<double> _getOpeningBalance(String beforeDate) async {
+    final db = await DatabaseHelper.instance.database;
+    
+    // Get all purchases before the date
+    final purchases = await db.query(
+      'purchases',
+      where: 'supplierId = ? AND date < ?',
+      whereArgs: [selectedSupplier!.id, beforeDate],
+    );
+
+    double openingBalance = 0.0;
+
+    for (var purchase in purchases) {
+      final purchaseId = purchase['id'] as int;
+      final totalAmount = (purchase['totalAmount'] as num).toDouble();
+      
+      // Get all payments for this purchase
+      final payments = await db.query(
+        'supplier_payments',
+        where: 'purchaseId = ?',
+        whereArgs: [purchaseId],
+      );
+
+      final totalPayments = payments.fold<double>(
+        0.0,
+        (sum, payment) => sum + ((payment['amount'] as num?)?.toDouble() ?? 0.0),
+      );
+
+      // Balance = Total - Payments
+      openingBalance += (totalAmount - totalPayments);
+    }
+
+    return openingBalance;
   }
 
   void _showErrorSnackBar(String message) {
@@ -190,12 +287,11 @@ void initState() {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Supplier Ledger'),
+        title: const Text('Supplier Ledger - Invoice by Invoice'),
         backgroundColor: const Color(0xFF009688),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: showFullScreen ? [
-          // Back to filters button when in full screen
           IconButton(
             icon: const Icon(Icons.filter_list),
             tooltip: 'Back to Filters',
@@ -207,25 +303,20 @@ void initState() {
     );
   }
 
-  // ==================== FILTER VIEW (LEFT PANEL + MAIN CONTENT) ====================
+  // ==================== FILTER VIEW ====================
 
   Widget _buildFilterView() {
     return Row(
       children: [
-        // Left Panel - Controls
         Container(
           width: 320,
           margin: const EdgeInsets.all(16),
           child: Column(
             children: [
               _buildControlPanel(),
-              // const SizedBox(height: 16),
-              // Expanded(child: _buildSupplierInfo()),
             ],
           ),
         ),
-
-        // Main Content - Ledger Preview
         Expanded(
           child: Container(
             margin: const EdgeInsets.fromLTRB(0, 16, 16, 16),
@@ -255,13 +346,8 @@ void initState() {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 30 ,color: Colors.grey.shade300),
+            Icon(Icons.receipt_long, size: 30, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            // Text(
-            //   'Select a supplier and click\n"Generate Ledger" to view full report',
-            //   textAlign: TextAlign.center,
-            //   style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-            // ),
           ],
         ),
       ),
@@ -277,8 +363,6 @@ void initState() {
         children: [
           _buildFullScreenHeader(),
           const SizedBox(height: 16),
-          // _buildSupplierInfoCard(),
-          // const SizedBox(height: 16),
           _buildSummaryCards(),
           const SizedBox(height: 16),
           _buildFullScreenLedgerTable(),
@@ -317,7 +401,7 @@ void initState() {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Supplier Ledger Report',
+                      'Supplier Ledger Report (Invoice by Invoice)',
                       style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
                     ),
                     const SizedBox(height: 4),
@@ -346,79 +430,6 @@ void initState() {
     );
   }
 
-  // Widget _buildSupplierInfoCard() {
-  //   return Container(
-  //     padding: const EdgeInsets.all(24),
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       borderRadius: BorderRadius.circular(12),
-  //       border: Border.all(color: const Color(0xFFE2E8F0)),
-  //       boxShadow: [
-  //         BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-  //       ],
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Container(
-  //           padding: const EdgeInsets.all(16),
-  //           decoration: BoxDecoration(
-  //             color: const Color(0xFF3B82F6).withOpacity(0.1),
-  //             borderRadius: BorderRadius.circular(12),
-  //           ),
-  //           child: const Icon(Icons.business, color: Color(0xFF3B82F6), size: 32),
-  //         ),
-  //         const SizedBox(width: 20),
-  //         Expanded(
-  //           child: Column(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               const Text(
-  //                 'Supplier Details',
-  //                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B), letterSpacing: 0.5),
-  //               ),
-  //               const SizedBox(height: 8),
-  //               Text(
-  //                 selectedSupplier!.name,
-  //                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
-  //               ),
-  //               const SizedBox(height: 4),
-  //               Text(
-  //                 selectedSupplier!.phone ?? 'N/A',
-  //                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         const SizedBox(width: 20),
-  //         Container(
-  //           padding: const EdgeInsets.all(20),
-  //           decoration: BoxDecoration(
-  //             gradient: LinearGradient(
-  //               colors: [const Color(0xFF009688).withOpacity(0.1), const Color(0xFF009688).withOpacity(0.05)],
-  //             ),
-  //             borderRadius: BorderRadius.circular(12),
-  //             border: Border.all(color: const Color(0xFF009688).withOpacity(0.2)),
-  //           ),
-  //           child: Column(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               const Text(
-  //                 'Initial Opening Balance',
-  //                 style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-  //               ),
-  //               const SizedBox(height: 6),
-  //               Text(
-  //                 currencyFormat.format(selectedSupplier!.openingBalance),
-  //                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF009688)),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
   Widget _buildFullScreenLedgerTable() {
     return Container(
       decoration: BoxDecoration(
@@ -444,6 +455,7 @@ void initState() {
             child: Row(
               children: [
                 _buildTableHeader('Date', flex: 2),
+                _buildTableHeader('Invoice #', flex: 2),
                 _buildTableHeader('Particulars', flex: 4),
                 _buildTableHeader('Type', flex: 2, align: TextAlign.center),
                 _buildTableHeader('Debit (+)', flex: 2, align: TextAlign.right),
@@ -470,6 +482,7 @@ void initState() {
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
+                  const Expanded(flex: 2, child: SizedBox()),
                   const Expanded(
                     flex: 4,
                     child: Row(
@@ -557,6 +570,19 @@ void initState() {
                       ),
                     ),
                     
+                    // Invoice Number
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        ledgerEntry.invoiceNumber ?? '-',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF3B82F6),
+                        ),
+                      ),
+                    ),
+                    
                     // Description
                     Expanded(
                       flex: 4,
@@ -569,10 +595,20 @@ void initState() {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              ledgerEntry.description,
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
-                              overflow: TextOverflow.ellipsis,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ledgerEntry.description,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (ledgerEntry.paymentMethod != null)
+                                  Text(
+                                    'via ${ledgerEntry.paymentMethod}',
+                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                  ),
+                              ],
                             ),
                           ),
                         ],
@@ -668,6 +704,7 @@ void initState() {
               child: Row(
                 children: [
                   const Expanded(flex: 2, child: SizedBox()),
+                  const Expanded(flex: 2, child: SizedBox()),
                   Expanded(
                     flex: 4,
                     child: Text(
@@ -728,7 +765,6 @@ void initState() {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Container(
@@ -748,7 +784,6 @@ void initState() {
           ),
           const SizedBox(height: 24),
 
-          // Supplier Dropdown
           const Text(
             'SELECT SUPPLIER',
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B), letterSpacing: 0.5),
@@ -804,7 +839,6 @@ void initState() {
           
           const SizedBox(height: 20),
           
-          // Date Range
           Row(
             children: [
               Expanded(child: _buildDateSelector('FROM', fromDate, () => _selectDate(true))),
@@ -815,7 +849,6 @@ void initState() {
 
           const SizedBox(height: 24),
 
-          // Generate Button
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -873,131 +906,6 @@ void initState() {
                 ),
               ],
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSupplierInfo() {
-    if (selectedSupplier == null) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.person_search, size: 48, color: Colors.grey.shade300),
-              const SizedBox(height: 12),
-              Text(
-                'Select a supplier\nto view details',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.business, color: Color(0xFF3B82F6), size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Supplier Details',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          
-          _buildInfoRow(Icons.person, 'Name', selectedSupplier!.name),
-          const Divider(height: 24),
-          _buildInfoRow(Icons.phone, 'Phone', selectedSupplier!.phone ?? 'N/A'),
-          const Divider(height: 24),
-          _buildInfoRow(Icons.location_on, 'Address', selectedSupplier!.company ?? 'N/A'),
-          
-          const Spacer(),
-          
-          // Initial Balance Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [const Color(0xFF009688).withOpacity(0.1), const Color(0xFF009688).withOpacity(0.05)],
-              ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF009688).withOpacity(0.2)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.account_balance_wallet, color: Color(0xFF009688), size: 20),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Initial Opening Balance',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      currencyFormat.format(selectedSupplier!.openingBalance),
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF009688)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: const Color(0xFF94A3B8)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF334155)),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
           ),
         ),
       ],
@@ -1210,19 +1118,25 @@ enum LedgerEntryType { purchase, payment }
 class LedgerEntry {
   final DateTime date;
   final String description;
+  final String? invoiceNumber;
   final double debit;
   final double credit;
   double balance;
   final LedgerEntryType type;
   final String? referenceNo;
+  final int? purchaseId;
+  final String? paymentMethod;
 
   LedgerEntry({
     required this.date,
     required this.description,
+    this.invoiceNumber,
     required this.debit,
     required this.credit,
     this.balance = 0.0,
     required this.type,
     this.referenceNo,
+    this.purchaseId,
+    this.paymentMethod,
   });
 }

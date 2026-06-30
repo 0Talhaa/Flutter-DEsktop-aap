@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:medical_app/Screens/customer_ledger_screen.dart';
 import 'package:medical_app/reports/customer_ledger_screen.dart';
 import 'package:medical_app/reports/customer_wise_sale_report.dart';
 import 'package:medical_app/reports/inventory_ledger_report.dart';
@@ -11,6 +12,8 @@ import 'package:medical_app/reports/purchase_report.dart';
 import 'package:medical_app/reports/sale_report.dart';
 import 'package:medical_app/reports/stock_report.dart';
 import 'package:medical_app/reports/supplier_ledger_report.dart';
+import 'package:medical_app/Screens/dashboardScreen.dart';
+import 'package:medical_app/reports/supplier_ledger_report_invoice_based.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -178,9 +181,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   Widget _getSelectedReportWidget() {
     switch (selectedReport) {
       case 'customer_ledger':
-        return const CustomerLedgerReport();
+        return const CustomerLedgerScreen();
       case 'supplier_ledger':
-        return const SupplierLedgerReport();
+        return const SupplierLedgerReportInvoiceBased();
       case 'sale_report':
         return const SaleReport();
       case 'purchase_report':
@@ -200,29 +203,45 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          
-          // ════════════════════════════════════════════════════════════════
-          // MOBILE LAYOUT (< 600px)
-          // ════════════════════════════════════════════════════════════════
-          if (width < 600) {
-            return _buildMobileLayout();
-          }
-          
-          // ════════════════════════════════════════════════════════════════
-          // TABLET & DESKTOP LAYOUT (> 600px) - All use top navigation now
-          // ════════════════════════════════════════════════════════════════
-          return _buildDesktopLayout();
-        },
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      
+      // ✅ Back Button
+      leading: IconButton(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumDashboardScreen())),
+        icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+        color: const Color(0xFF1E293B),
       ),
-    );
-  }
+
+      // ✅ Optional Title (agar chaho)
+      title: const Text(
+        "Customer",
+        style: TextStyle(
+          color: Color(0xFF1E293B),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      centerTitle: true,
+    ),
+
+    backgroundColor: const Color(0xFFF1F5F9),
+    body: LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+
+        if (width < 600) {
+          return _buildMobileLayout();
+        }
+
+        return _buildDesktopLayout();
+      },
+    ),
+  );
+}
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 📱 MOBILE LAYOUT

@@ -67,7 +67,7 @@ class _SupplierPaymentByInvoiceScreenState
     try {
       final db = await DatabaseHelper.instance.database;
 
-      // Get unpaid/partially paid invoices
+      // ✅ FIX: Get only invoices with outstanding balance
       final invoices = await db.query(
         'purchases',
         where: 'supplierId = ? AND balance > 0',
@@ -79,7 +79,7 @@ class _SupplierPaymentByInvoiceScreenState
       final balanceResult = await db.rawQuery('''
         SELECT COALESCE(SUM(balance), 0) as totalBalance
         FROM purchases
-        WHERE supplierId = ?
+        WHERE supplierId = ? AND balance > 0
       ''', [selectedSupplier!.id]);
 
       final totalBalance = (balanceResult.first['totalBalance'] as num).toDouble();
@@ -90,6 +90,8 @@ class _SupplierPaymentByInvoiceScreenState
         selectedInvoiceIds.clear();
         isLoading = false;
       });
+      
+      debugPrint('✅ Loaded ${invoices.length} unpaid invoices');
     } catch (e) {
       setState(() => isLoading = false);
       _showErrorSnackBar('Error loading invoices: $e');
@@ -159,10 +161,12 @@ class _SupplierPaymentByInvoiceScreenState
 
     try {
       final db = await DatabaseHelper.instance.database;
+      
+      // ✅ FIX: Use transaction to ensure data consistency
       await db.transaction((txn) async {
         double remainingAmount = paymentAmount;
 
-        // Get selected invoices ordered by date
+        // Get selected invoices ordered by date (FIFO)
         final selectedInvoices = unpaidInvoices
             .where((inv) => selectedInvoiceIds.contains(inv['id']))
             .toList()
@@ -180,7 +184,7 @@ class _SupplierPaymentByInvoiceScreenState
           final paymentForInvoice =
               remainingAmount > currentBalance ? currentBalance : remainingAmount;
 
-          // Update invoice
+          // ✅ FIX: Update invoice properly
           final newAmountPaid = currentAmountPaid + paymentForInvoice;
           final newBalance = currentBalance - paymentForInvoice;
 
@@ -189,18 +193,18 @@ class _SupplierPaymentByInvoiceScreenState
             {
               'amountPaid': newAmountPaid,
               'balance': newBalance,
-              'status': newBalance <= 0 ? 'paid' : 'pending',
+              'status': newBalance <= 0.01 ? 'paid' : 'pending', // ✅ Handle floating point
             },
             where: 'id = ?',
             whereArgs: [invoiceId],
           );
 
-          // Record payment
+          // ✅ FIX: Record payment with invoice linkage
           await txn.insert('supplier_payments', {
             'supplierId': selectedSupplier!.id,
             'supplierName': selectedSupplier!.name,
-            'purchaseId': invoiceId,
-            'invoiceNumber': invoiceNumber,
+            'purchaseId': invoiceId, // ✅ Link to purchase
+            'invoiceNumber': invoiceNumber, // ✅ Store invoice number
             'date': paymentDate.toIso8601String(),
             'amount': paymentForInvoice,
             'paymentMethod': selectedPaymentMethod,
@@ -210,6 +214,8 @@ class _SupplierPaymentByInvoiceScreenState
           });
 
           remainingAmount -= paymentForInvoice;
+          
+          debugPrint('✅ Invoice $invoiceNumber: Paid ${currencyFormat.format(paymentForInvoice)}, Balance: ${currencyFormat.format(newBalance)}');
         }
       });
 
@@ -223,12 +229,13 @@ class _SupplierPaymentByInvoiceScreenState
         ),
       );
 
-      // Reload invoices
+      // ✅ FIX: Reload invoices to reflect changes
       await _loadUnpaidInvoices();
       _clearForm();
     } catch (e) {
       setState(() => isLoading = false);
       _showErrorSnackBar('Error processing payment: $e');
+      debugPrint('❌ Payment error: $e');
     }
   }
 
@@ -321,7 +328,7 @@ Widget build(BuildContext context) {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ✅ Left Panel - Scrollable
+          // Left Panel - Scrollable
           SizedBox(
             width: 380,
             child: SingleChildScrollView(
@@ -587,15 +594,6 @@ Widget build(BuildContext context) {
               ),
             ),
 
-            // const SizedBox(height: 16),
-
-            // // Reference
-            // _buildTextField(
-            //   label: 'REFERENCE (Optional)',
-            //   controller: referenceController,
-            //   prefixIcon: Icons.receipt_long,
-            // ),
-
             const SizedBox(height: 16),
 
             // Notes
@@ -702,11 +700,11 @@ Widget build(BuildContext context) {
                   size: 20,
                 ),
               ),
-              const SizedBox(width: 12), // ✅ Fixed missing spacing
+              const SizedBox(width: 12),
               const Text(
                 'Payment Distribution',
                 style: TextStyle(
-                  fontSize: 14, // ✅ Fixed font size (was 3!)
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF1E293B),
                 ),
@@ -968,7 +966,7 @@ Widget build(BuildContext context) {
                             Text(
                               selectedSupplier == null
                                   ? 'Select a supplier to view unpaid invoices'
-                                  : 'No unpaid invoices for this supplier',
+                                  : '🎉 All invoices paid! No outstanding balance.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.grey.shade400,

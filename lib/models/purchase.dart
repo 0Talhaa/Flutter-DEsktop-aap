@@ -76,12 +76,12 @@ class PurchaseItem {
     this.batchNumber,
   });
 
-  double get lineTotal {
-    double base = tradePrice * quantity;
-    double disc = discount ?? 0;
-    double tax = salesTax ?? 0;
-    return base - disc + tax;
-  }
+double get lineTotal {
+  double base = tradePrice * quantity;
+  double discAmount = base * ((discount ?? 0) / 100);
+  double taxAmount = base * ((salesTax ?? 0) / 100);
+  return base - discAmount + taxAmount;
+}
 
   Map<String, dynamic> toMap() {
     return {
@@ -178,13 +178,12 @@ class PurchaseItemData {
     this.baseQuantity,
   });
 
-  double get lineTotal {
-    double base = tradePrice * quantity;
-    double disc = discount ?? 0;
-    double tax = salesTax ?? 0;
-    return base - disc + tax;
-  }
-
+double get lineTotal {
+  double base = tradePrice * quantity;
+  double discAmount = base * ((discount ?? 0) / 100);
+  double taxAmount = base * ((salesTax ?? 0) / 100);
+  return base - discAmount + taxAmount;
+}
   /// Get display string for unit (e.g., "2 Strips (20 Tablets)")
   String get unitDisplayString {
     if (unitType == null || baseQuantity == null) {

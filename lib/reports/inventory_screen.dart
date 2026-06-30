@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:medical_app/models/product.dart';
+import 'package:medical_app/models/purchase.dart';
 import 'package:medical_app/services/database_helper.dart';
+import 'package:medical_app/services/refresh_notifier.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -16,6 +18,7 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   List<Product> products = [];
   List<Product> filteredProducts = [];
+  List <PurchaseItem> quantityofpurchaseitems = [];
   String searchQuery = '';
   bool isLoading = true;
   String _selectedFilter = 'All';
@@ -27,19 +30,49 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void initState() {
     super.initState();
     _loadInventory();
+    AppRefresh.inventory.addListener(_loadInventory);
+    _debugDatabasePath();
+    
   }
+  Future<void> _debugDatabasePath() async {
+  final path = await DatabaseHelper.instance.getDatabasePath();
+  debugPrint('🔍 INVENTORY SCREEN DB: $path');
+}
+   @override
+  void dispose() {
+    AppRefresh.inventory.removeListener(_loadInventory);
+    super.dispose();
+  }
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  _loadInventory();
+  
+}
 
   Future<void> _loadInventory() async {
-    setState(() => isLoading = true);
+    if (!mounted) return;  
+  setState(() => isLoading = true);
 
-    final data = await DatabaseHelper.instance.getAllProducts();
+  try {
+    // ✅ Force fresh data from database
+    final data = await DatabaseHelper.instance.getAllProducts(activeOnly: true);
 
-    setState(() {
-      products = data;
-      _applyFilters();
-      isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        products = data;
+        _applyFilters();
+        isLoading = false;
+      });
+    }
+  } catch (e) {
+    debugPrint('❌ Error loading inventory: $e');
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
   }
+}
+
 
   void _applyFilters() {
     List<Product> result = products;

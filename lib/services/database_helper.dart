@@ -1,10 +1,10 @@
-// lib/services/database_helper.dart
 
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:medical_app/models/brand.dart';
 import 'package:medical_app/models/issue_unit.dart';
+import 'package:medical_app/services/refresh_notifier.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -35,33 +35,28 @@ class DatabaseHelper {
     return _database!;
   }
 
-Future<Database> _initDB(String fileName) async {
+  Future<Database> _initDB(String fileName) async {
+    final appDataPath = Platform.environment['LOCALAPPDATA'];
+    final dbDir = Directory(join(appDataPath!, 'MedicalPOS'));
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
+    final path = join(dbDir.path, fileName);
+    debugPrint('📁 FIXED Database Path: $path');
+    return await openDatabase(
+      path,
+      version: 16, // bumped from 13 → 14
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+Future<String> getDatabasePath() async {
   final appDataPath = Platform.environment['LOCALAPPDATA'];
-
-  final dbDir = Directory(join(appDataPath!, 'MedicalPOS'));
-
-  // Folder create agar exist na ho
-  if (!await dbDir.exists()) {
-    await dbDir.create(recursive: true);
-  }
-
-  final path = join(dbDir.path, fileName);
-
-  debugPrint('📁 FIXED Database Path: $path');
-
-  return await openDatabase(
-    path,
-    version: 11,
-    onCreate: _createDB,
-    onUpgrade: _onUpgrade,
-  );
+  final dbDir = join(appDataPath!, 'MedicalPOS');
+  final path = join(dbDir, 'medical_store.db');
+  return path;
 }
-
-  Future<String> getDatabasePath() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'medical_store.db');
-    return path;
-  }
 
   Future<void> printDatabaseLocation() async {
     final path = await getDatabasePath();
@@ -86,10 +81,17 @@ Future<Database> _initDB(String fileName) async {
     }
 
     final defaultCategories = [
-      'Tablets', 'Capsules', 'Syrups', 'Injections', 'Creams & Ointments',
-      'Drops', 'Surgical Items', 'Baby Care', 'Personal Care', 'Other',
+      'Tablets',
+      'Capsules',
+      'Syrups',
+      'Injections',
+      'Creams & Ointments',
+      'Drops',
+      'Surgical Items',
+      'Baby Care',
+      'Personal Care',
+      'Other',
     ];
-
     for (var category in defaultCategories) {
       await db.insert('categories', {
         'name': category,
@@ -99,11 +101,19 @@ Future<Database> _initDB(String fileName) async {
     }
 
     final defaultBrands = [
-      'GlaxoSmithKline (GSK)', 'Pfizer', 'Getz Pharma', 'Searle Pakistan',
-      'Abbott Laboratories', 'Sanofi', 'Martin Dow', 'Hilton Pharma',
-      'Sami Pharmaceuticals', 'Bosch Pharmaceuticals', 'High-Q Pharmaceuticals', 'Other',
+      'GlaxoSmithKline (GSK)',
+      'Pfizer',
+      'Getz Pharma',
+      'Searle Pakistan',
+      'Abbott Laboratories',
+      'Sanofi',
+      'Martin Dow',
+      'Hilton Pharma',
+      'Sami Pharmaceuticals',
+      'Bosch Pharmaceuticals',
+      'High-Q Pharmaceuticals',
+      'Other',
     ];
-
     for (var brand in defaultBrands) {
       await db.insert('brands', {
         'name': brand,
@@ -124,7 +134,6 @@ Future<Database> _initDB(String fileName) async {
       {'name': 'Tablet', 'abbreviation': 'Tab'},
       {'name': 'Capsule', 'abbreviation': 'Cap'},
     ];
-
     for (var unit in defaultUnits) {
       await db.insert('issue_units', {
         'name': unit['name'],
@@ -145,7 +154,7 @@ Future<Database> _initDB(String fileName) async {
     const realType = 'REAL NOT NULL';
     const integerType = 'INTEGER NOT NULL';
 
-    // PRODUCTS TABLE - WITH conversionTiersJson column
+    // PRODUCTS TABLE
     await db.execute('''
       CREATE TABLE products (
         id $idType,
@@ -191,7 +200,7 @@ Future<Database> _initDB(String fileName) async {
       )
     ''');
 
-    // SUPPLIERS TABLE
+    // SUPPLIERS TABLE — no openingBalance column
     await db.execute('''
       CREATE TABLE suppliers (
         id $idType,
@@ -202,32 +211,31 @@ Future<Database> _initDB(String fileName) async {
         teleNumber TEXT,
         address TEXT,
         city TEXT,
-        openingBalance REAL DEFAULT 0,
         isActive INTEGER DEFAULT 1
       )
     ''');
 
-        // SALES TABLE
-        await db.execute('''
-          CREATE TABLE sales (
-            id $idType,
-            invoiceId TEXT,
-            dateTime $textType,
-            customerId INTEGER,
-            customerName TEXT,
-            subtotal $realType,
-            discount REAL DEFAULT 0,
-            tax REAL DEFAULT 0,
-            total $realType,
-            previousBalance REAL DEFAULT 0,
-            totalDue REAL DEFAULT 0,
-            amountPaid REAL DEFAULT 0,
-            balance REAL DEFAULT 0,
-            paymentMethod TEXT,
-            status TEXT DEFAULT 'completed',
-            notes TEXT
-          )
-        ''');
+    // SALES TABLE
+    await db.execute('''
+      CREATE TABLE sales (
+        id $idType,
+        invoiceId TEXT,
+        dateTime $textType,
+        customerId INTEGER,
+        customerName TEXT,
+        subtotal $realType,
+        discount REAL DEFAULT 0,
+        tax REAL DEFAULT 0,
+        total $realType,
+        previousBalance REAL DEFAULT 0,
+        totalDue REAL DEFAULT 0,
+        amountPaid REAL DEFAULT 0,
+        balance REAL DEFAULT 0,
+        paymentMethod TEXT,
+        status TEXT DEFAULT 'completed',
+        notes TEXT
+      )
+    ''');
 
     // SALE ITEMS TABLE
     await db.execute('''
@@ -269,22 +277,23 @@ Future<Database> _initDB(String fileName) async {
     // PURCHASE ITEMS TABLE
     await db.execute('''
       CREATE TABLE purchase_items (
-        id $idType,
-        purchaseId $integerType,
-        productId $integerType,
-        productName $textType,
-        packing TEXT,
-        quantity $integerType,
-        tradePrice $realType,
-        discount REAL DEFAULT 0,
-        salesTax REAL DEFAULT 0,
-        lineTotal $realType,
-        expiryDate TEXT,
-        batchNumber TEXT,
-        unitType TEXT,
-        baseQuantity INTEGER,
-        FOREIGN KEY (purchaseId) REFERENCES purchases(id)
-      )
+      id $idType,
+      purchaseId $integerType,
+      productId $integerType,
+      productName $textType,
+      packing TEXT,
+      quantity $integerType,
+      tradePrice $realType,
+      retailPrice REAL DEFAULT 0,
+      discount REAL DEFAULT 0,
+      salesTax REAL DEFAULT 0,
+      lineTotal $realType,
+      expiryDate TEXT,
+      batchNumber TEXT,
+      unitType TEXT,
+      baseQuantity INTEGER,
+      FOREIGN KEY (purchaseId) REFERENCES purchases(id)
+    )
     ''');
 
     // SUPPLIER PAYMENTS TABLE
@@ -293,6 +302,8 @@ Future<Database> _initDB(String fileName) async {
         id $idType,
         supplierId INTEGER NOT NULL,
         supplierName TEXT NOT NULL,
+        purchaseId INTEGER,
+        invoiceNumber TEXT,
         date TEXT NOT NULL,
         amount REAL NOT NULL,
         paymentMethod TEXT DEFAULT 'Cash',
@@ -412,7 +423,6 @@ Future<Database> _initDB(String fileName) async {
     ''');
 
     await _insertDefaultData(db);
-
     debugPrint('✅ All database tables created successfully');
   }
 
@@ -421,29 +431,51 @@ Future<Database> _initDB(String fileName) async {
   // ============================================================================
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    debugPrint('🔄 Upgrading database from v$oldVersion to v$newVersion');
+  debugPrint('🔄 Upgrading database from v$oldVersion to v$newVersion');
 
-    if (oldVersion < 5) {
-      await _createSuppliersTableIfMissing(db);
-    }
-
-    await _addMissingColumns(db);
-
-    if (oldVersion < 8) {
-      await _createPaymentTablesIfMissing(db);
-    }
-
-    if (oldVersion < 9) {
-      await _createCategoriesTableIfMissing(db);
-      await _createBrandsTableIfMissing(db);
-      await _createIssueUnitsTableIfMissing(db);
-      await _insertDefaultData(db);
-    }
-
-    await _createMissingTables(db);
-
-    debugPrint('✅ Database upgrade completed to v$newVersion');
+  if (oldVersion < 5) {
+    await _createSuppliersTableIfMissing(db);
   }
+
+  await _addMissingColumns(db);
+
+  if (oldVersion < 8) {
+    await _createPaymentTablesIfMissing(db);
+  }
+
+  if (oldVersion < 9) {
+    await _createCategoriesTableIfMissing(db);
+    await _createBrandsTableIfMissing(db);
+    await _createIssueUnitsTableIfMissing(db);
+    await _insertDefaultData(db);
+  }
+
+  if (oldVersion < 12) {
+    await _safeAddColumn(db, 'supplier_payments', 'purchaseId', 'INTEGER');
+    await _safeAddColumn(db, 'supplier_payments', 'invoiceNumber', 'TEXT');
+  }
+
+  if (oldVersion < 14) {
+    await _safeAddColumn(db, 'customer_payments', 'saleId', 'INTEGER');
+    await _safeAddColumn(db, 'customer_payments', 'invoiceId', 'TEXT');
+  }
+
+  if (oldVersion < 15) {
+    await _safeAddColumn(
+        db, 'purchase_items', 'retailPrice', 'REAL DEFAULT 0');
+  }
+
+  // ✅ NEW: version 16 migration
+  if (oldVersion < 16) {
+    await _safeAddColumn(
+        db, 'purchase_items', 'retailPrice', 'REAL DEFAULT 0');
+    debugPrint('✅ v16: retailPrice column ensured in purchase_items');
+  }
+
+  await _createMissingTables(db);
+  debugPrint('✅ Database upgrade completed to v$newVersion');
+}
+
 
   Future<void> _createSuppliersTableIfMissing(Database db) async {
     try {
@@ -457,7 +489,6 @@ Future<Database> _initDB(String fileName) async {
           teleNumber TEXT,
           address TEXT,
           city TEXT,
-          openingBalance REAL DEFAULT 0,
           isActive INTEGER DEFAULT 1
         )
       ''');
@@ -478,9 +509,8 @@ Future<Database> _initDB(String fileName) async {
           createdAt TEXT
         )
       ''');
-      debugPrint('✅ Categories table created/verified');
     } catch (e) {
-      debugPrint('⚠️ Categories table might already exist: $e');
+      debugPrint('⚠️ categories: $e');
     }
   }
 
@@ -499,9 +529,8 @@ Future<Database> _initDB(String fileName) async {
           createdAt TEXT
         )
       ''');
-      debugPrint('✅ Brands table created/verified');
     } catch (e) {
-      debugPrint('⚠️ Brands table might already exist: $e');
+      debugPrint('⚠️ brands: $e');
     }
   }
 
@@ -517,53 +546,46 @@ Future<Database> _initDB(String fileName) async {
           createdAt TEXT
         )
       ''');
-      debugPrint('✅ Issue Units table created/verified');
     } catch (e) {
-      debugPrint('⚠️ Issue Units table might already exist: $e');
+      debugPrint('⚠️ issue_units: $e');
     }
   }
 
   Future<void> _addMissingColumns(Database db) async {
-    // Products table columns
     await _safeAddColumn(db, 'products', 'barcode', 'TEXT');
     await _safeAddColumn(db, 'products', 'category', 'TEXT');
     await _safeAddColumn(db, 'products', 'description', 'TEXT');
     await _safeAddColumn(db, 'products', 'isActive', 'INTEGER DEFAULT 1');
     await _safeAddColumn(db, 'products', 'createdAt', 'TEXT');
     await _safeAddColumn(db, 'products', 'updatedAt', 'TEXT');
-
-    // Unit conversion columns for products
     await _safeAddColumn(db, 'products', 'baseUnit', 'TEXT');
     await _safeAddColumn(db, 'products', 'unitsPerStrip', 'INTEGER');
     await _safeAddColumn(db, 'products', 'stripsPerBox', 'INTEGER');
     await _safeAddColumn(db, 'products', 'pricePerUnit', 'REAL');
     await _safeAddColumn(db, 'products', 'pricePerStrip', 'REAL');
     await _safeAddColumn(db, 'products', 'pricePerBox', 'REAL');
-    await _safeAddColumn(db, 'products', 'hasUnitConversion', 'INTEGER DEFAULT 0');
-    
-    // ★★★ NEW: Add conversionTiersJson column for dynamic tiers ★★★
+    await _safeAddColumn(
+        db, 'products', 'hasUnitConversion', 'INTEGER DEFAULT 0');
     await _safeAddColumn(db, 'products', 'conversionTiersJson', 'TEXT');
 
-    // Customers table columns
     await _safeAddColumn(db, 'customers', 'email', 'TEXT');
     await _safeAddColumn(db, 'customers', 'cnic', 'TEXT');
     await _safeAddColumn(db, 'customers', 'isActive', 'INTEGER DEFAULT 1');
 
-    // Suppliers table columns
     await _safeAddColumn(db, 'suppliers', 'address', 'TEXT');
     await _safeAddColumn(db, 'suppliers', 'city', 'TEXT');
     await _safeAddColumn(db, 'suppliers', 'isActive', 'INTEGER DEFAULT 1');
+    // Note: openingBalance column may exist from older installs — we leave it
+    // but never read or write it.
 
-    // Sales table columns
     await _safeAddColumn(db, 'sales', 'status', 'TEXT DEFAULT "completed"');
     await _safeAddColumn(db, 'sales', 'notes', 'TEXT');
-    await _safeAddColumn(db, 'sales', 'previousBalance', 'REAL DEFAULT 0');  // ADD THIS
-    await _safeAddColumn(db, 'sales', 'totalDue', 'REAL DEFAULT 0');         // ADD THIS
-    // Sale items columns
+    await _safeAddColumn(db, 'sales', 'previousBalance', 'REAL DEFAULT 0');
+    await _safeAddColumn(db, 'sales', 'totalDue', 'REAL DEFAULT 0');
+
     await _safeAddColumn(db, 'sale_items', 'unitType', 'TEXT');
     await _safeAddColumn(db, 'sale_items', 'baseQuantity', 'INTEGER');
 
-    // Purchases table columns
     await _safeAddColumn(db, 'purchases', 'supplierId', 'INTEGER');
     await _safeAddColumn(db, 'purchases', 'amountPaid', 'REAL DEFAULT 0');
     await _safeAddColumn(db, 'purchases', 'balance', 'REAL DEFAULT 0');
@@ -571,8 +593,8 @@ Future<Database> _initDB(String fileName) async {
     await _safeAddColumn(db, 'purchases', 'notes', 'TEXT');
     await _safeAddColumn(db, 'purchases', 'createdAt', 'TEXT');
 
-    // Purchase items columns
     await _safeAddColumn(db, 'purchase_items', 'packing', 'TEXT');
+    await _safeAddColumn(db, 'purchase_items', 'retailPrice', 'REAL DEFAULT 0');
     await _safeAddColumn(db, 'purchase_items', 'discount', 'REAL DEFAULT 0');
     await _safeAddColumn(db, 'purchase_items', 'salesTax', 'REAL DEFAULT 0');
     await _safeAddColumn(db, 'purchase_items', 'expiryDate', 'TEXT');
@@ -580,9 +602,10 @@ Future<Database> _initDB(String fileName) async {
     await _safeAddColumn(db, 'purchase_items', 'unitType', 'TEXT');
     await _safeAddColumn(db, 'purchase_items', 'baseQuantity', 'INTEGER');
 
-    // Expenses columns
-    await _safeAddColumn(db, 'expenses', 'paymentMethod', 'TEXT');
-    await _safeAddColumn(db, 'expenses', 'reference', 'TEXT');
+    await _safeAddColumn(db, 'supplier_payments', 'purchaseId', 'INTEGER');
+    await _safeAddColumn(db, 'supplier_payments', 'invoiceNumber', 'TEXT');
+    await _safeAddColumn(db, 'customer_payments', 'saleId', 'INTEGER');
+    await _safeAddColumn(db, 'customer_payments', 'invoiceId', 'TEXT');
   }
 
   Future<void> _createPaymentTablesIfMissing(Database db) async {
@@ -592,12 +615,15 @@ Future<Database> _initDB(String fileName) async {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           supplierId INTEGER NOT NULL,
           supplierName TEXT NOT NULL,
+          purchaseId INTEGER,
+          invoiceNumber TEXT,
           date TEXT NOT NULL,
           amount REAL NOT NULL,
           paymentMethod TEXT DEFAULT 'Cash',
           reference TEXT,
           notes TEXT,
-          createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (supplierId) REFERENCES suppliers(id)
         )
       ''');
 
@@ -606,17 +632,20 @@ Future<Database> _initDB(String fileName) async {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           customerId INTEGER NOT NULL,
           customerName TEXT NOT NULL,
+          saleId INTEGER,
+          invoiceId TEXT,
           date TEXT NOT NULL,
           amount REAL NOT NULL,
           paymentMethod TEXT DEFAULT 'Cash',
           reference TEXT,
           notes TEXT,
-          createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (customerId) REFERENCES customers(id)
         )
       ''');
       debugPrint('✅ Payment tables created/verified');
     } catch (e) {
-      debugPrint('⚠️ Payment tables might already exist: $e');
+      debugPrint('⚠️ Payment tables: $e');
     }
   }
 
@@ -659,8 +688,6 @@ Future<Database> _initDB(String fileName) async {
           value TEXT
         )
       ''');
-
-      debugPrint('✅ All missing tables created');
     } catch (e) {
       debugPrint('⚠️ Some tables might already exist: $e');
     }
@@ -675,7 +702,6 @@ Future<Database> _initDB(String fileName) async {
     try {
       final result = await db.rawQuery('PRAGMA table_info($table)');
       final columnExists = result.any((row) => row['name'] == column);
-
       if (!columnExists) {
         await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
         debugPrint('✅ Added column $column to $table');
@@ -694,6 +720,8 @@ Future<Database> _initDB(String fileName) async {
     await _createBrandsTableIfMissing(db);
     await _createIssueUnitsTableIfMissing(db);
     await _insertDefaultData(db);
+    await _safeAddColumn(db, 'customer_payments', 'saleId', 'INTEGER');
+    await _safeAddColumn(db, 'customer_payments', 'invoiceId', 'TEXT');
     debugPrint('✅ Manual migration completed');
   }
 
@@ -710,17 +738,10 @@ Future<Database> _initDB(String fileName) async {
 
   Future<List<Product>> getAllProducts({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'products',
-      where: where,
-      orderBy: 'itemName ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result =
+        await db.query('products', where: where, orderBy: 'itemName ASC');
     return result.map((json) => Product.fromMap(json)).toList();
   }
 
@@ -774,22 +795,110 @@ Future<Database> _initDB(String fileName) async {
 
   Future<int> deleteProduct(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'products',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('products', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> updateProductStock(int id, int newStock) async {
     final db = await instance.database;
-    await db.update(
-      'products',
-      {'stock': newStock},
-      where: 'id = ?',
-      whereArgs: [id],
+    await db.update('products', {'stock': newStock},
+        where: 'id = ?', whereArgs: [id]);
+    debugPrint('✅ Stock SET to $newStock for product $id');
+  }
+
+  Future<void> updatePurchaseWithDetails({
+  required int purchaseId,
+  required String invoiceNumber,
+  required DateTime date,
+  required int supplierId,
+  required String supplierName,
+  required double totalAmount,
+  required double amountPaid,
+  required List<PurchaseItem> items,
+  String? notes,
+}) async {
+  final db = await database;
+
+  await db.transaction((txn) async {
+    // Step 1: Get OLD items to REVERSE their stock
+    final oldItems = await txn.query(
+      'purchase_items',
+      where: 'purchaseId = ?',           // ← was purchase_id
+      whereArgs: [purchaseId],
     );
+
+    for (final oldItem in oldItems) {
+      final productId = oldItem['productId'] as int;           // ← was product_id
+      final oldBaseQty = (oldItem['baseQuantity'] as num?)?.toInt() // ← was base_quantity
+          ?? (oldItem['quantity'] as num).toInt();
+
+      await txn.rawUpdate(
+        'UPDATE products SET stock = stock - ? WHERE id = ?',  // ← was stock_quantity
+        [oldBaseQty, productId],
+      );
+    }
+
+    // Step 2: Update the purchase header
+    await txn.update(
+      'purchases',
+      {
+        'invoiceNumber': invoiceNumber,    // ← was invoice_number
+        'date': date.toIso8601String(),
+        'supplierId': supplierId,          // ← was supplier_id
+        'supplierName': supplierName,      // ← was supplier_name
+        'totalAmount': totalAmount,        // ← was total_amount
+        'amountPaid': amountPaid,          // ← was amount_paid
+        'balance': totalAmount - amountPaid,
+        'notes': notes,
+        // removed 'updated_at' — that column doesn't exist in your schema
+      },
+      where: 'id = ?',
+      whereArgs: [purchaseId],
+    );
+
+    // Step 3: Delete old items
+    await txn.delete(
+      'purchase_items',
+      where: 'purchaseId = ?',            // ← was purchase_id
+      whereArgs: [purchaseId],
+    );
+
+    // Step 4: Insert new items and add stock
+    for (final item in items) {
+      final baseQty = item.baseQuantity ?? item.quantity;
+      debugPrint('   Base Quantity: $baseQty');
+
+      await txn.insert('purchase_items', {
+        'purchaseId': purchaseId,          // ← was purchase_id
+        'productId': item.productId,       // ← was product_id
+        'productName': item.productName,   // ← was product_name
+        'quantity': item.quantity,
+        'baseQuantity': baseQty,           // ← was base_quantity
+        'tradePrice': item.tradePrice,     // ← was trade_price
+        'discount': item.discount ?? 0,
+        'salesTax': item.salesTax ?? 0,    // ← was sales_tax
+        'lineTotal': item.lineTotal,       // ← was subtotal (wrong column name)
+        'unitType': item.unitType,         // ← was unit_type
+        'packing': item.packing,
+        'expiryDate': item.expiryDate,     // ← was expiry_date
+        'batchNumber': item.batchNumber,   // ← was batch_number
+      });
+
+      await txn.rawUpdate(
+        'UPDATE products SET stock = stock + ? WHERE id = ?',  // ← was stock_quantity
+        [baseQty, item.productId],
+      );
+    }
+  });
+}
+
+  Future<void> addProductStock(int id, int quantityToAdd) async {
+    final db = await instance.database;
+    await db.rawUpdate(
+      'UPDATE products SET stock = stock + ? WHERE id = ?',
+      [quantityToAdd, id],
+    );
+    debugPrint('✅ Added $quantityToAdd stock to product $id');
   }
 
   Future<List<Product>> getLowStockProducts({int threshold = 10}) async {
@@ -823,60 +932,37 @@ Future<Database> _initDB(String fileName) async {
 
   Future<List<Customer>> getAllCustomers({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'customers',
-      where: where,
-      orderBy: 'name ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result =
+        await db.query('customers', where: where, orderBy: 'name ASC');
     return result.map((json) => Customer.fromMap(json)).toList();
   }
 
   Future<Customer?> getCustomerById(int id) async {
     final db = await instance.database;
-    final result = await db.query(
-      'customers',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final result =
+        await db.query('customers', where: 'id = ?', whereArgs: [id], limit: 1);
     if (result.isEmpty) return null;
     return Customer.fromMap(result.first);
   }
 
   Future<int> updateCustomer(Customer customer) async {
     final db = await instance.database;
-    return await db.update(
-      'customers',
-      customer.toMap(),
-      where: 'id = ?',
-      whereArgs: [customer.id],
-    );
+    return await db.update('customers', customer.toMap(),
+        where: 'id = ?', whereArgs: [customer.id]);
   }
 
   Future<int> deleteCustomer(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'customers',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('customers', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> updateCustomerBalance(int customerId, double newBalance) async {
     final db = await instance.database;
-    await db.update(
-      'customers',
-      {'openingBalance': newBalance},
-      where: 'id = ?',
-      whereArgs: [customerId],
-    );
+    await db.update('customers', {'openingBalance': newBalance},
+        where: 'id = ?', whereArgs: [customerId]);
     debugPrint('✅ Customer $customerId balance updated to $newBalance');
   }
 
@@ -891,40 +977,25 @@ Future<Database> _initDB(String fileName) async {
 
   Future<List<Supplier>> getAllSuppliers({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'suppliers',
-      where: where,
-      orderBy: 'name ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result =
+        await db.query('suppliers', where: where, orderBy: 'name ASC');
     return result.map((json) => Supplier.fromMap(json)).toList();
   }
 
   Future<Supplier?> getSupplierById(int id) async {
     final db = await instance.database;
-    final result = await db.query(
-      'suppliers',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final result =
+        await db.query('suppliers', where: 'id = ?', whereArgs: [id], limit: 1);
     if (result.isEmpty) return null;
     return Supplier.fromMap(result.first);
   }
 
   Future<Supplier?> getSupplierByName(String name) async {
     final db = await instance.database;
-    final result = await db.query(
-      'suppliers',
-      where: 'name = ?',
-      whereArgs: [name],
-      limit: 1,
-    );
+    final result = await db.query('suppliers',
+        where: 'name = ?', whereArgs: [name], limit: 1);
     if (result.isEmpty) return null;
     return Supplier.fromMap(result.first);
   }
@@ -937,511 +1008,60 @@ Future<Database> _initDB(String fileName) async {
       where: 'id = ?',
       whereArgs: [supplier.id],
     );
-    debugPrint(
-      '✅ Supplier ${supplier.name} updated. Balance: ${supplier.openingBalance}',
-    );
+    debugPrint('✅ Supplier ${supplier.name} updated.');
     return result;
   }
 
   Future<int> deleteSupplier(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'suppliers',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<void> updateSupplierBalance(int supplierId, double newBalance) async {
-    final db = await instance.database;
-    await db.update(
-      'suppliers',
-      {'openingBalance': newBalance},
-      where: 'id = ?',
-      whereArgs: [supplierId],
-    );
-    debugPrint('✅ Supplier $supplierId balance updated to $newBalance');
-  }
-
-  // ============================================================================
-  // SALES OPERATIONS
-  // ============================================================================
-
-  Future<int> addSale(Map<String, dynamic> saleMap) async {
-    final db = await instance.database;
-    return await db.insert('sales', saleMap);
-  }
-
-  Future<void> addSaleItems(int saleId, List<SaleItem> items) async {
-    final db = await instance.database;
-
-    for (var item in items) {
-      var itemMap = item.toMap();
-      itemMap['saleId'] = saleId;
-      await db.insert('sale_items', itemMap);
-
-      int stockToDeduct = item.quantity;
-      if (item.unitType != null && item.baseQuantity != null) {
-        stockToDeduct = item.baseQuantity!;
-      }
-
-      await db.rawUpdate('UPDATE products SET stock = stock - ? WHERE id = ?', [
-        stockToDeduct,
-        item.productId,
-      ]);
-    }
-  }
-
-  Future<int> updateSale(int id, Map<String, dynamic> saleMap) async {
-    final db = await database;
-    saleMap.remove('id');
-    return await db.update('sales', saleMap, where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<void> updateSaleItems(int saleId, List<SaleItem> items) async {
-    final db = await database;
-
-    await db.transaction((txn) async {
-      final oldItems = await txn.query(
-        'sale_items',
-        where: 'saleId = ?',
-        whereArgs: [saleId],
-      );
-
-      for (var oldItem in oldItems) {
-        int stockToRestore = oldItem['quantity'] as int;
-        if (oldItem['baseQuantity'] != null) {
-          stockToRestore = oldItem['baseQuantity'] as int;
-        }
-        await txn.rawUpdate(
-          'UPDATE products SET stock = stock + ? WHERE id = ?',
-          [stockToRestore, oldItem['productId']],
-        );
-      }
-
-      await txn.delete('sale_items', where: 'saleId = ?', whereArgs: [saleId]);
-
-      for (var item in items) {
-        await txn.insert('sale_items', {
-          'saleId': saleId,
-          'productId': item.productId,
-          'productName': item.productName,
-          'packing': item.packing,
-          'price': item.price,
-          'tradePrice': item.tradePrice ?? 0,
-          'discount': item.discount ?? 0,
-          'salesTax': item.salesTax ?? 0,
-          'quantity': item.quantity,
-          'lineTotal': item.lineTotal,
-          'unitType': item.unitType,
-          'baseQuantity': item.baseQuantity,
-        });
-
-        int stockToDeduct = item.quantity;
-        if (item.baseQuantity != null) {
-          stockToDeduct = item.baseQuantity!;
-        }
-
-        await txn.rawUpdate(
-          'UPDATE products SET stock = stock - ? WHERE id = ?',
-          [stockToDeduct, item.productId],
-        );
-      }
-    });
-  }
-
-  Future<Map<String, dynamic>?> getSaleByInvoiceId(String invoiceId) async {
-    final db = await database;
-    final results = await db.query(
-      'sales',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
-
-    if (results.isEmpty) return null;
-    return results.first;
-  }
-
-  Future<List<Map<String, dynamic>>> getSaleItems(int saleId) async {
-    final db = await database;
-    return await db.query(
-      'sale_items',
-      where: 'saleId = ?',
-      whereArgs: [saleId],
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getAllSalesWithItems() async {
-    final db = await instance.database;
-    final salesResult = await db.query('sales', orderBy: 'dateTime DESC');
-
-    List<Map<String, dynamic>> salesWithItems = [];
-
-    for (var sale in salesResult) {
-      final itemsResult = await db.query(
-        'sale_items',
-        where: 'saleId = ?',
-        whereArgs: [sale['id']],
-      );
-      final items = itemsResult
-          .map((itemMap) => SaleItem.fromMap(itemMap))
-          .toList();
-
-      salesWithItems.add({...sale, 'items': items});
-    }
-    return salesWithItems;
-  }
-
-  Future<List<Map<String, dynamic>>> getSalesInDateRange(
-    String from,
-    String to,
-  ) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'sales',
-      where: 'dateTime BETWEEN ? AND ?',
-      whereArgs: [from, '$to 23:59:59'],
-      orderBy: 'dateTime DESC',
-    );
-
-    List<Map<String, dynamic>> salesWithItems = [];
-    for (var sale in result) {
-      final items = await db.query(
-        'sale_items',
-        where: 'saleId = ?',
-        whereArgs: [sale['id']],
-      );
-      final saleItems = items.map((i) => SaleItem.fromMap(i)).toList();
-      salesWithItems.add({...sale, 'items': saleItems});
-    }
-    return salesWithItems;
-  }
-
-  Future<List<Map<String, dynamic>>> getCustomerCreditSales(
-    int customerId,
-    String from,
-    String to,
-  ) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'sales',
-      where: 'customerId = ? AND balance > 0 AND dateTime BETWEEN ? AND ?',
-      whereArgs: [customerId, from, '$to 23:59:59'],
-      orderBy: 'dateTime ASC',
-    );
-
-    List<Map<String, dynamic>> salesWithItems = [];
-    for (var sale in result) {
-      final items = await db.query(
-        'sale_items',
-        where: 'saleId = ?',
-        whereArgs: [sale['id']],
-      );
-      final saleItems = items.map((i) => SaleItem.fromMap(i)).toList();
-      salesWithItems.add({...sale, 'items': saleItems});
-    }
-    return salesWithItems;
-  }
-
-  // ============================================================================
-  // PURCHASES OPERATIONS
-  // ============================================================================
-
-  Future<int> addPurchase(Purchase purchase) async {
-    final db = await instance.database;
-
-    final double amountPaidValue = purchase.amountPaid;
-    final double totalAmount = purchase.totalAmount;
-    final double balance = totalAmount - amountPaidValue;
-
-    final purchaseId = await db.insert('purchases', {
-      'invoiceNumber': purchase.invoiceNumber,
-      'date': purchase.date.toIso8601String(),
-      'supplierName': purchase.supplierName,
-      'totalAmount': totalAmount,
-      'amountPaid': amountPaidValue,
-      'balance': balance,
-      'status': balance <= 0 ? 'paid' : 'pending',
-      'createdAt': DateTime.now().toIso8601String(),
-    });
-
-    for (var item in purchase.items) {
-      await db.insert('purchase_items', {
-        'purchaseId': purchaseId,
-        'productId': item.productId,
-        'productName': item.productName,
-        'packing': item.packing,
-        'quantity': item.quantity,
-        'tradePrice': item.tradePrice,
-        'retailPrice': item.retailPrice ?? 0,
-        'discount': item.discount ?? 0,
-        'salesTax': item.salesTax ?? 0,
-        'lineTotal': item.lineTotal,
-        'unitType': item.unitType,
-        'baseQuantity': item.baseQuantity,
-        'expiryDate': item.expiryDate,
-        'batchNumber': item.batchNumber,
-      });
-
-      final stockToAdd = item.baseQuantity ?? item.quantity;
-      await db.rawUpdate('UPDATE products SET stock = stock + ? WHERE id = ?', [
-        stockToAdd,
-        item.productId,
-      ]);
-    }
-
-    return purchaseId;
-  }
-
- Future<int> addPurchaseWithDetails({
-  required String invoiceNumber,
-  required DateTime date,
-  required int supplierId,
-  required String supplierName,
-  required double totalAmount,
-  required double amountPaid,
-  required List<PurchaseItem> items,
-  String? notes,
-}) async {
-  final db = await instance.database;
-  
-  try {
-    // ✅ Use transaction for atomic operation
-    return await db.transaction((txn) async {
-      final balance = totalAmount - amountPaid;
-
-      final purchaseId = await txn.insert('purchases', {
-        'invoiceNumber': invoiceNumber,
-        'date': date.toIso8601String(),
-        'supplierId': supplierId,
-        'supplierName': supplierName,
-        'totalAmount': totalAmount,
-        'amountPaid': amountPaid,
-        'balance': balance,
-        'status': balance <= 0 ? 'paid' : 'pending',
-        'notes': notes,
-        'createdAt': DateTime.now().toIso8601String(),
-      });
-
-      debugPrint('✅ Purchase entry saved with ID: $purchaseId');
-
-      for (var item in items) {
-        await txn.insert('purchase_items', {
-          'purchaseId': purchaseId,
-          'productId': item.productId,
-          'productName': item.productName,
-          'packing': item.packing,
-          'quantity': item.quantity,
-          'tradePrice': item.tradePrice,
-          'discount': item.discount ?? 0,
-          'salesTax': item.salesTax ?? 0,
-          'lineTotal': item.lineTotal,
-          'unitType': item.unitType,
-          'baseQuantity': item.baseQuantity ?? item.quantity, // ✅ Fallback
-        });
-
-        final stockToAdd = item.baseQuantity ?? item.quantity;
-        
-        debugPrint('📦 Adding stock: $stockToAdd to product ${item.productId}');
-        
-        // ✅ Update stock
-        final updateCount = await txn.rawUpdate(
-          'UPDATE products SET stock = stock + ? WHERE id = ?',
-          [stockToAdd, item.productId],
-        );
-        
-        if (updateCount == 0) {
-          debugPrint('⚠️ Warning: Product ${item.productId} not found');
-        } else {
-          debugPrint('✅ Stock updated for product ${item.productId}');
-        }
-      }
-
-      debugPrint('🎉 Purchase transaction completed successfully');
-      return purchaseId;
-    });
-  } catch (e) {
-    debugPrint('❌ Purchase transaction failed: $e');
-    rethrow; // ✅ Propagate error to UI
-  }
-}
-
-  Future<List<Map<String, dynamic>>> getPurchasesInDateRange(
-    String from,
-    String to,
-  ) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'purchases',
-      where: 'date BETWEEN ? AND ?',
-      whereArgs: [from, '$to 23:59:59'],
-      orderBy: 'date DESC',
-    );
-
-    List<Map<String, dynamic>> purchasesWithItems = [];
-    for (var purchase in result) {
-      final items = await db.query(
-        'purchase_items',
-        where: 'purchaseId = ?',
-        whereArgs: [purchase['id']],
-      );
-      purchasesWithItems.add({...purchase, 'items': items});
-    }
-    return purchasesWithItems;
-  }
-
-  Future<List<Map<String, dynamic>>> getSupplierPurchases({
-    required String supplierName,
-    required String fromDate,
-    required String toDate,
-  }) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'purchases',
-      where: 'supplierName = ? AND date BETWEEN ? AND ?',
-      whereArgs: [supplierName, fromDate, '$toDate 23:59:59'],
-      orderBy: 'date ASC',
-    );
-
-    return result;
-  }
-
-  Future<List<Map<String, dynamic>>> getSupplierLedgerData({
-    required int supplierId,
-    required String supplierName,
-    required String fromDate,
-    required String toDate,
-  }) async {
-    final db = await instance.database;
-
-    final purchases = await db.query(
-      'purchases',
-      where: 'supplierName = ? AND date BETWEEN ? AND ?',
-      whereArgs: [supplierName, fromDate, '$toDate 23:59:59'],
-      orderBy: 'date ASC',
-    );
-
-    return purchases;
+    return await db.update('suppliers', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   // ============================================================================
   // SUPPLIER BALANCE CALCULATIONS
+  // ── Balance = SUM of unpaid purchase balances for this supplier
+  // ── No opening balance involved
   // ============================================================================
 
+  /// Total outstanding across ALL purchases for this supplier.
+  /// balance column on each purchase = totalAmount - amountPaid at save time.
+  Future<double> getSupplierTotalOutstanding(int supplierId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT COALESCE(SUM(balance), 0) AS totalOutstanding
+      FROM purchases
+      WHERE supplierId = ? AND balance > 0
+    ''', [supplierId]);
+    return (result.first['totalOutstanding'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// Same as getSupplierTotalOutstanding — kept for callers that still use
+  /// the old name.
+  Future<double> getCurrentSupplierBalance(String supplierName) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT COALESCE(SUM(balance), 0) AS totalOutstanding
+      FROM purchases
+      WHERE supplierName = ? AND balance > 0
+    ''', [supplierName]);
+    return (result.first['totalOutstanding'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// Balance owed up to (but not including) [beforeDate].
   Future<double> getSupplierBalanceAtDate({
     required String supplierName,
-    required double initialOpeningBalance,
+    // required double initialOpeningBalance, // ignored — kept for API compat
     required String beforeDate,
   }) async {
     final db = await instance.database;
-
-    final purchaseResult = await db.rawQuery(
-      '''
-      SELECT 
-        COALESCE(SUM(totalAmount), 0) as totalPurchased,
-        COALESCE(SUM(amountPaid), 0) as totalPaidWithPurchase
-      FROM purchases 
+    // Sum of (totalAmount - amountPaid) for purchases before the date
+    final result = await db.rawQuery('''
+      SELECT COALESCE(SUM(totalAmount - amountPaid), 0) AS outstanding
+      FROM purchases
       WHERE supplierName = ? AND date < ?
-    ''',
-      [supplierName, beforeDate],
-    );
-
-    double totalPurchased = 0.0;
-    double totalPaidWithPurchase = 0.0;
-
-    if (purchaseResult.isNotEmpty) {
-      totalPurchased =
-          (purchaseResult.first['totalPurchased'] as num?)?.toDouble() ?? 0.0;
-      totalPaidWithPurchase =
-          (purchaseResult.first['totalPaidWithPurchase'] as num?)?.toDouble() ??
-          0.0;
-    }
-
-    double separatePayments = 0.0;
-    try {
-      final paymentResult = await db.rawQuery(
-        '''
-        SELECT COALESCE(SUM(amount), 0) as totalPayments
-        FROM supplier_payments 
-        WHERE supplierName = ? AND date < ?
-      ''',
-        [supplierName, beforeDate],
-      );
-
-      if (paymentResult.isNotEmpty) {
-        separatePayments =
-            (paymentResult.first['totalPayments'] as num?)?.toDouble() ?? 0.0;
-      }
-    } catch (e) {
-      debugPrint('⚠️ supplier_payments table might not exist: $e');
-    }
-
-    double balanceAtDate =
-        initialOpeningBalance +
-        totalPurchased -
-        totalPaidWithPurchase -
-        separatePayments;
-
-    return balanceAtDate;
-  }
-
-  Future<double> getCurrentSupplierBalance(String supplierName) async {
-    final db = await instance.database;
-
-    final supplierResult = await db.query(
-      'suppliers',
-      where: 'name = ?',
-      whereArgs: [supplierName],
-      limit: 1,
-    );
-
-    if (supplierResult.isEmpty) return 0.0;
-
-    double openingBalance =
-        (supplierResult.first['openingBalance'] as num?)?.toDouble() ?? 0.0;
-
-    final purchaseResult = await db.rawQuery(
-      '''
-      SELECT 
-        COALESCE(SUM(totalAmount), 0) as totalPurchased,
-        COALESCE(SUM(amountPaid), 0) as totalPaid
-      FROM purchases 
-      WHERE supplierName = ?
-    ''',
-      [supplierName],
-    );
-
-    double totalPurchased = 0.0;
-    double totalPaid = 0.0;
-
-    if (purchaseResult.isNotEmpty) {
-      totalPurchased =
-          (purchaseResult.first['totalPurchased'] as num?)?.toDouble() ?? 0.0;
-      totalPaid =
-          (purchaseResult.first['totalPaid'] as num?)?.toDouble() ?? 0.0;
-    }
-
-    double separatePayments = 0.0;
-    try {
-      final paymentResult = await db.rawQuery(
-        '''
-        SELECT COALESCE(SUM(amount), 0) as totalPayments
-        FROM supplier_payments 
-        WHERE supplierName = ?
-      ''',
-        [supplierName],
-      );
-
-      if (paymentResult.isNotEmpty) {
-        separatePayments =
-            (paymentResult.first['totalPayments'] as num?)?.toDouble() ?? 0.0;
-      }
-    } catch (e) {
-      debugPrint('⚠️ supplier_payments table might not exist: $e');
-    }
-
-    return openingBalance + totalPurchased - totalPaid - separatePayments;
+    ''', [supplierName, beforeDate]);
+    return (result.first['outstanding'] as num?)?.toDouble() ?? 0.0;
   }
 
   // ============================================================================
@@ -1455,43 +1075,30 @@ Future<Database> _initDB(String fileName) async {
   }) async {
     final db = await instance.database;
 
-    final salesResult = await db.rawQuery(
-      '''
-      SELECT 
+    final salesResult = await db.rawQuery('''
+      SELECT
         COALESCE(SUM(total), 0) as totalSales,
         COALESCE(SUM(amountPaid), 0) as totalPaidWithSale
-      FROM sales 
+      FROM sales
       WHERE customerName = ? AND dateTime < ?
-    ''',
-      [customerName, beforeDate],
-    );
+    ''', [customerName, beforeDate]);
 
-    double totalSales = 0.0;
-    double totalPaidWithSale = 0.0;
-
-    if (salesResult.isNotEmpty) {
-      totalSales = (salesResult.first['totalSales'] as num?)?.toDouble() ?? 0.0;
-      totalPaidWithSale =
-          (salesResult.first['totalPaidWithSale'] as num?)?.toDouble() ?? 0.0;
-    }
+    double totalSales =
+        (salesResult.first['totalSales'] as num?)?.toDouble() ?? 0.0;
+    double totalPaidWithSale =
+        (salesResult.first['totalPaidWithSale'] as num?)?.toDouble() ?? 0.0;
 
     double separatePayments = 0.0;
     try {
-      final paymentResult = await db.rawQuery(
-        '''
+      final paymentResult = await db.rawQuery('''
         SELECT COALESCE(SUM(amount), 0) as totalPayments
-        FROM customer_payments 
+        FROM customer_payments
         WHERE customerName = ? AND date < ?
-      ''',
-        [customerName, beforeDate],
-      );
-
-      if (paymentResult.isNotEmpty) {
-        separatePayments =
-            (paymentResult.first['totalPayments'] as num?)?.toDouble() ?? 0.0;
-      }
+      ''', [customerName, beforeDate]);
+      separatePayments =
+          (paymentResult.first['totalPayments'] as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      debugPrint('⚠️ customer_payments table might not exist: $e');
+      debugPrint('⚠️ customer_payments: $e');
     }
 
     return initialOpeningBalance +
@@ -1514,7 +1121,6 @@ Future<Database> _initDB(String fileName) async {
     String? notes,
   }) async {
     final db = await instance.database;
-
     final paymentId = await db.insert('supplier_payments', {
       'supplierId': supplierId,
       'supplierName': supplierName,
@@ -1525,7 +1131,6 @@ Future<Database> _initDB(String fileName) async {
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
     });
-
     debugPrint('✅ Supplier payment added: $amount to $supplierName');
     return paymentId;
   }
@@ -1536,7 +1141,6 @@ Future<Database> _initDB(String fileName) async {
     required String toDate,
   }) async {
     final db = await instance.database;
-
     try {
       return await db.query(
         'supplier_payments',
@@ -1551,10 +1155,8 @@ Future<Database> _initDB(String fileName) async {
   }
 
   Future<List<Map<String, dynamic>>> getAllSupplierPayments(
-    int supplierId,
-  ) async {
+      int supplierId) async {
     final db = await instance.database;
-
     try {
       return await db.query(
         'supplier_payments',
@@ -1582,7 +1184,6 @@ Future<Database> _initDB(String fileName) async {
     String? notes,
   }) async {
     final db = await instance.database;
-
     final paymentId = await db.insert('customer_payments', {
       'customerId': customerId,
       'customerName': customerName,
@@ -1593,7 +1194,6 @@ Future<Database> _initDB(String fileName) async {
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
     });
-
     debugPrint('✅ Customer payment received: $amount from $customerName');
     return paymentId;
   }
@@ -1604,7 +1204,6 @@ Future<Database> _initDB(String fileName) async {
     required String toDate,
   }) async {
     final db = await instance.database;
-
     try {
       return await db.query(
         'customer_payments',
@@ -1619,23 +1218,357 @@ Future<Database> _initDB(String fileName) async {
   }
 
   // ============================================================================
+  // SALES OPERATIONS
+  // ============================================================================
+
+  Future<int> addSale(Map<String, dynamic> saleMap) async {
+    final db = await instance.database;
+    return await db.insert('sales', saleMap);
+  }
+
+  Future<void> addSaleItems(int saleId, List<SaleItem> items) async {
+    final db = await instance.database;
+    for (var item in items) {
+      var itemMap = item.toMap();
+      itemMap['saleId'] = saleId;
+      await db.insert('sale_items', itemMap);
+      int stockToDeduct = item.quantity;
+      if (item.unitType != null && item.baseQuantity != null) {
+        stockToDeduct = item.baseQuantity!;
+      }
+      await db.rawUpdate('UPDATE products SET stock = stock - ? WHERE id = ?', [
+        stockToDeduct,
+        item.productId,
+      ]);
+    }
+  }
+
+  Future<int> updateSale(int id, Map<String, dynamic> saleMap) async {
+    final db = await database;
+    saleMap.remove('id');
+    return await db.update('sales', saleMap, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> updateSaleItems(int saleId, List<SaleItem> items) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final oldItems = await txn
+          .query('sale_items', where: 'saleId = ?', whereArgs: [saleId]);
+      for (var oldItem in oldItems) {
+        int stockToRestore = oldItem['quantity'] as int;
+        if (oldItem['baseQuantity'] != null)
+          stockToRestore = oldItem['baseQuantity'] as int;
+        await txn.rawUpdate(
+          'UPDATE products SET stock = stock + ? WHERE id = ?',
+          [stockToRestore, oldItem['productId']],
+        );
+      }
+      await txn.delete('sale_items', where: 'saleId = ?', whereArgs: [saleId]);
+      for (var item in items) {
+        await txn.insert('sale_items', {
+          'saleId': saleId,
+          'productId': item.productId,
+          'productName': item.productName,
+          'packing': item.packing,
+          'price': item.price,
+          'tradePrice': item.tradePrice ?? 0,
+          'discount': item.discount ?? 0,
+          'salesTax': item.salesTax ?? 0,
+          'quantity': item.quantity,
+          'lineTotal': item.lineTotal,
+          'unitType': item.unitType,
+          'baseQuantity': item.baseQuantity,
+        });
+        int stockToDeduct = item.quantity;
+        if (item.baseQuantity != null) stockToDeduct = item.baseQuantity!;
+        await txn.rawUpdate(
+          'UPDATE products SET stock = stock - ? WHERE id = ?',
+          [stockToDeduct, item.productId],
+        );
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>?> getSaleByInvoiceId(String invoiceId) async {
+    final db = await database;
+    final results =
+        await db.query('sales', where: 'invoiceId = ?', whereArgs: [invoiceId]);
+    if (results.isEmpty) return null;
+    return results.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getSaleItems(int saleId) async {
+    final db = await database;
+    return await db
+        .query('sale_items', where: 'saleId = ?', whereArgs: [saleId]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllSalesWithItems() async {
+    final db = await instance.database;
+    final salesResult = await db.query('sales', orderBy: 'dateTime DESC');
+    List<Map<String, dynamic>> salesWithItems = [];
+    for (var sale in salesResult) {
+      final itemsResult = await db
+          .query('sale_items', where: 'saleId = ?', whereArgs: [sale['id']]);
+      final items = itemsResult.map((m) => SaleItem.fromMap(m)).toList();
+      salesWithItems.add({...sale, 'items': items});
+    }
+    return salesWithItems;
+  }
+
+  Future<List<Map<String, dynamic>>> getSalesInDateRange(
+      String from, String to) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'sales',
+      where: 'dateTime BETWEEN ? AND ?',
+      whereArgs: [from, '$to 23:59:59'],
+      orderBy: 'dateTime DESC',
+    );
+    List<Map<String, dynamic>> salesWithItems = [];
+    for (var sale in result) {
+      final items = await db
+          .query('sale_items', where: 'saleId = ?', whereArgs: [sale['id']]);
+      salesWithItems.add(
+          {...sale, 'items': items.map((i) => SaleItem.fromMap(i)).toList()});
+    }
+    return salesWithItems;
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomerCreditSales(
+    int customerId,
+    String from,
+    String to,
+  ) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'sales',
+      where: 'customerId = ? AND balance > 0 AND dateTime BETWEEN ? AND ?',
+      whereArgs: [customerId, from, '$to 23:59:59'],
+      orderBy: 'dateTime ASC',
+    );
+    List<Map<String, dynamic>> salesWithItems = [];
+    for (var sale in result) {
+      final items = await db
+          .query('sale_items', where: 'saleId = ?', whereArgs: [sale['id']]);
+      salesWithItems.add(
+          {...sale, 'items': items.map((i) => SaleItem.fromMap(i)).toList()});
+    }
+    return salesWithItems;
+  }
+
+  // ============================================================================
+  // PURCHASES OPERATIONS
+  // ============================================================================
+
+ 
+Future<int> addPurchaseWithDetails({
+  required String invoiceNumber,
+  required DateTime date,
+  required int supplierId,
+  required String supplierName,
+  required double totalAmount,
+  required double amountPaid,
+  required List<PurchaseItem> items,
+  required List<Product> productsList,
+  String? notes,
+}) async {
+  final db = await instance.database;
+  try {
+    return await db.transaction((txn) async {
+      final balance = totalAmount - amountPaid;
+
+      // Step 1: Insert purchase header
+      final purchaseId = await txn.insert('purchases', {
+        'invoiceNumber': invoiceNumber,
+        'date': date.toIso8601String(),
+        'supplierId': supplierId,
+        'supplierName': supplierName,
+        'totalAmount': totalAmount,
+        'amountPaid': amountPaid,
+        'balance': balance,
+        'status': balance <= 0 ? 'paid' : 'pending',
+        'notes': notes,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      
+      debugPrint('✅ Purchase entry saved with ID: $purchaseId');
+      debugPrint('📊 Processing ${items.length} items...');
+
+      // Step 2: Insert purchase items AND update stock
+      for (var item in items) {
+        final baseQty = item.baseQuantity ?? item.quantity;
+        
+        debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugPrint('📦 Processing: ${item.productName}');
+        debugPrint('   Product ID: ${item.productId}');
+        debugPrint('   Quantity: ${item.quantity}');
+        debugPrint('   Base Quantity: $baseQty');
+        debugPrint('   Unit Type: ${item.unitType ?? "N/A"}');
+
+        // Check current stock before update
+        final currentStockResult = await txn.query(
+          'products',
+          columns: ['stock'],
+          where: 'id = ?',
+          whereArgs: [item.productId],
+        );
+        
+        if (currentStockResult.isEmpty) {
+          debugPrint('❌ ERROR: Product ID ${item.productId} not found in products table!');
+          // throw Exception('Product ${item.productName} (ID: ${item.productId}) does not exist');
+        }
+        
+        final currentStock = (currentStockResult.first['stock'] as num?)?.toInt() ?? 0;
+        debugPrint('   Current Stock: $currentStock');
+        
+        // Insert purchase item
+        await txn.insert('purchase_items', {
+          'purchaseId': purchaseId,
+          'productId': item.productId,
+          'productName': item.productName,
+          'packing': item.packing,
+          'quantity': item.quantity,
+          'tradePrice': item.tradePrice,
+          'retailPrice': item.retailPrice ?? 0,
+          'discount': item.discount ?? 0,
+          'salesTax': item.salesTax ?? 0,
+          'lineTotal': item.lineTotal,
+          'unitType': item.unitType,
+          'baseQuantity': baseQty,
+        });
+        
+        debugPrint('   ✅ Purchase item inserted');
+
+        // NAYA WALA - LAGAO
+          await txn.execute(
+            'UPDATE products SET stock = (SELECT stock FROM products WHERE id = ?) + ? WHERE id = ?',
+            [item.productId, baseQty, item.productId],
+          );
+
+          // Verify
+          final check = await txn.rawQuery(
+            'SELECT stock FROM products WHERE id = ?',
+            [item.productId],
+          );
+          debugPrint('✅ Stock after update: ${check.first['stock']} for product ${item.productId}');
+        
+        // Update stock - THIS IS THE CRITICAL PART
+        // final updateCount = await txn.rawUpdate(
+        //   'UPDATE products SET stock = stock + ? WHERE id = ?',
+        //   [baseQty, item.productId],
+        // );
+        
+        // if (updateCount == 0) {
+        //   debugPrint('❌ FAILED: Stock not updated for product ${item.productId}');
+        //   throw Exception('Failed to update stock for ${item.productName}');
+        // }
+        
+        // debugPrint('   ✅ Stock update query executed (affected rows: $updateCount)');
+        
+        // Verify the update
+        final newStockResult = await txn.query(
+          'products',
+          columns: ['stock'],
+          where: 'id = ?',
+          whereArgs: [item.productId],
+        );
+        
+        if (newStockResult.isEmpty) {
+          debugPrint('❌ ERROR: Product disappeared after update!');
+          // throw Exception('Product ${item.productName} not found after stock update');
+        }
+        
+        final newStock = (newStockResult.first['stock'] as num?)?.toInt() ?? 0;
+        
+        debugPrint('   ✅ Stock Updated: $currentStock → $newStock (+$baseQty)');
+        
+        // VERIFICATION CHECK
+        if (newStock != (currentStock + baseQty)) {
+          debugPrint('❌ WARNING: Stock mismatch! Expected ${currentStock + baseQty}, got $newStock');
+        }
+        
+        debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      }
+
+      debugPrint('🎉 Purchase transaction completed successfully');
+      debugPrint('   Purchase ID: $purchaseId');
+      debugPrint('   Items processed: ${items.length}');
+      
+      // Notify inventory listeners
+      AppRefresh.inventory.notify();
+      
+      return purchaseId;
+    });
+  } catch (e, stackTrace) {
+    debugPrint('❌ Purchase transaction failed: $e');
+    debugPrint('Stack trace: $stackTrace');
+    rethrow;
+  }
+}
+
+  Future<List<Map<String, dynamic>>> getPurchasesInDateRange(
+      String from, String to) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'purchases',
+      where: 'date BETWEEN ? AND ?',
+      whereArgs: [from, '$to 23:59:59'],
+      orderBy: 'date DESC',
+    );
+    List<Map<String, dynamic>> purchasesWithItems = [];
+    for (var purchase in result) {
+      final items = await db.query('purchase_items',
+          where: 'purchaseId = ?', whereArgs: [purchase['id']]);
+      purchasesWithItems.add({...purchase, 'items': items});
+    }
+    return purchasesWithItems;
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierPurchases({
+    required String supplierName,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'purchases',
+      where: 'supplierName = ? AND date BETWEEN ? AND ?',
+      whereArgs: [supplierName, fromDate, '$toDate 23:59:59'],
+      orderBy: 'date ASC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierLedgerData({
+    required int supplierId,
+    required String supplierName,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'purchases',
+      where: 'supplierName = ? AND date BETWEEN ? AND ?',
+      whereArgs: [supplierName, fromDate, '$toDate 23:59:59'],
+      orderBy: 'date ASC',
+    );
+  }
+
+  // ============================================================================
   // EXPENSES OPERATIONS
   // ============================================================================
 
   Future<int> addExpense(Map<String, dynamic> expenseMap) async {
     final db = await instance.database;
-
     final safeMap = <String, dynamic>{
       'date': expenseMap['date'],
       'category': expenseMap['category'],
       'amount': expenseMap['amount'],
       'description': expenseMap['description'] ?? '',
     };
-
     try {
       final columns = await db.rawQuery('PRAGMA table_info(expenses)');
       final columnNames = columns.map((c) => c['name'] as String).toSet();
-
       if (columnNames.contains('paymentMethod') &&
           expenseMap['paymentMethod'] != null) {
         safeMap['paymentMethod'] = expenseMap['paymentMethod'];
@@ -1647,16 +1580,11 @@ Future<Database> _initDB(String fileName) async {
     } catch (e) {
       debugPrint('⚠️ Could not check expense columns: $e');
     }
-
-    final id = await db.insert('expenses', safeMap);
-    debugPrint('✅ Expense saved with ID: $id');
-    return id;
+    return await db.insert('expenses', safeMap);
   }
 
   Future<List<Map<String, dynamic>>> getExpensesInDateRange(
-    String from,
-    String to,
-  ) async {
+      String from, String to) async {
     final db = await instance.database;
     return await db.query(
       'expenses',
@@ -1681,9 +1609,7 @@ Future<Database> _initDB(String fileName) async {
   }
 
   Future<List<Map<String, dynamic>>> getPaymentsInDateRange(
-    String from,
-    String to,
-  ) async {
+      String from, String to) async {
     final db = await instance.database;
     return await db.query(
       'payments',
@@ -1699,32 +1625,22 @@ Future<Database> _initDB(String fileName) async {
 
   Future<int> saveDailyClosing(Map<String, dynamic> closingMap) async {
     final db = await instance.database;
-
     final existing = await db.query(
       'daily_closing',
       where: 'date = ?',
       whereArgs: [closingMap['date']],
     );
-
     if (existing.isNotEmpty) {
-      return await db.update(
-        'daily_closing',
-        closingMap,
-        where: 'date = ?',
-        whereArgs: [closingMap['date']],
-      );
+      return await db.update('daily_closing', closingMap,
+          where: 'date = ?', whereArgs: [closingMap['date']]);
     }
-
     return await db.insert('daily_closing', closingMap);
   }
 
   Future<Map<String, dynamic>?> getDailyClosing(String date) async {
     final db = await instance.database;
-    final result = await db.query(
-      'daily_closing',
-      where: 'date = ?',
-      whereArgs: [date],
-    );
+    final result =
+        await db.query('daily_closing', where: 'date = ?', whereArgs: [date]);
     return result.isNotEmpty ? result.first : null;
   }
 
@@ -1732,82 +1648,88 @@ Future<Database> _initDB(String fileName) async {
   // SETTINGS OPERATIONS
   // ============================================================================
 
-  // Future<void> saveSetting(String key, String value) async {
-  //   final db = await instance.database;
-  //   await db.insert('settings', {
-  //     'key': key,
-  //     'value': value,
-  //   }, conflictAlgorithm: ConflictAlgorithm.replace);
-  // }
-
   Future<String?> getSetting(String key) async {
     final db = await instance.database;
-    final result = await db.query(
-      'settings',
-      where: 'key = ?',
-      whereArgs: [key],
-    );
+    final result =
+        await db.query('settings', where: 'key = ?', whereArgs: [key]);
     return result.isNotEmpty ? result.first['value'] as String? : null;
   }
 
-  // ============================================================================
-// COMPANY SETTINGS OPERATIONS
-// ============================================================================
+  Future<bool> saveCompanySettings({
+    required String shopName,
+    required String shopAddress,
+    required String shopPhone,
+    String? shopTagline,
+    String? shopEmail,
+    String? shopLogo,
+  }) async {
+    try {
+      final db = await instance.database;
+      await db.transaction((txn) async {
+        final settingsToSave = {
+          'shop_name': shopName.trim(),
+          'shop_address': shopAddress.trim(),
+          'shop_phone': shopPhone.trim(),
+          'shop_tagline': shopTagline?.trim() ?? '',
+          'shop_email': shopEmail?.trim() ?? '',
+        };
+        if (shopLogo != null && shopLogo.isNotEmpty) {
+          settingsToSave['shop_logo'] = shopLogo;
+        }
+        for (final entry in settingsToSave.entries) {
+          await txn.rawInsert(
+            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+            [entry.key, entry.value],
+          );
+        }
+      });
+      final verifyName = await getSetting('shop_name');
+      return verifyName?.trim() == shopName.trim();
+    } catch (e) {
+      debugPrint('❌ Error saving company settings: $e');
+      return false;
+    }
+  }
 
-Future<void> saveCompanySettings({
-  required String shopName,
-  required String shopAddress,
-  required String shopPhone,
-  String? shopTagline,
-  String? shopEmail,
-  String? shopLogo,
-}) async {
-  final db = await instance.database;
-  
-  await db.insert('settings', {'key': 'shop_name', 'value': shopName},
-      conflictAlgorithm: ConflictAlgorithm.replace);
-  await db.insert('settings', {'key': 'shop_address', 'value': shopAddress},
-      conflictAlgorithm: ConflictAlgorithm.replace);
-  await db.insert('settings', {'key': 'shop_phone', 'value': shopPhone},
-      conflictAlgorithm: ConflictAlgorithm.replace);
-  
-  if (shopTagline != null) {
-    await db.insert('settings', {'key': 'shop_tagline', 'value': shopTagline},
-        conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<Map<String, String?>> getCompanySettings() async {
+    try {
+      final db = await instance.database;
+      final results = await db.query(
+        'settings',
+        where: "key IN (?, ?, ?, ?, ?, ?)",
+        whereArgs: [
+          'shop_name',
+          'shop_address',
+          'shop_phone',
+          'shop_tagline',
+          'shop_email',
+          'shop_logo'
+        ],
+      );
+      final Map<String, String?> settingsMap = {};
+      for (final row in results) {
+        settingsMap[row['key'] as String] = row['value'] as String?;
+      }
+      return {
+        'shop_name': settingsMap['shop_name'] ?? '',
+        'shop_address': settingsMap['shop_address'] ?? '',
+        'shop_phone': settingsMap['shop_phone'] ?? '',
+        'shop_tagline': settingsMap['shop_tagline'] ?? '',
+        'shop_email': settingsMap['shop_email'] ?? '',
+        'shop_logo': settingsMap['shop_logo'],
+      };
+    } catch (e) {
+      debugPrint('❌ Error loading company settings: $e');
+      return {
+        'shop_name': '',
+        'shop_address': '',
+        'shop_phone': '',
+        'shop_tagline': '',
+        'shop_email': '',
+        'shop_logo': null
+      };
+    }
   }
-  
-  if (shopEmail != null) {
-    await db.insert('settings', {'key': 'shop_email', 'value': shopEmail},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-  
-  if (shopLogo != null) {
-    await db.insert('settings', {'key': 'shop_logo', 'value': shopLogo},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-  
-  debugPrint('✅ Company settings saved');
-}
-
-Future<Map<String, String?>> getCompanySettings() async {
-  final db = await instance.database;
-  
-  final shopName = await getSetting('shop_name');
-  final shopAddress = await getSetting('shop_address');
-  final shopPhone = await getSetting('shop_phone');
-  final shopTagline = await getSetting('shop_tagline');
-  final shopEmail = await getSetting('shop_email');
-  final shopLogo = await getSetting('shop_logo');
-  
-  return {
-    'shop_name': shopName ?? 'Medical Store',
-    'shop_address': shopAddress ?? 'Shop Address',
-    'shop_phone': shopPhone ?? '0300-0000000',
-    'shop_tagline': shopTagline,
-    'shop_email': shopEmail,
-    'shop_logo': shopLogo,
-  };
-}
 
   // ============================================================================
   // DASHBOARD QUERIES
@@ -1816,25 +1738,20 @@ Future<Map<String, String?>> getCompanySettings() async {
   Future<double> getTodaySalesTotal() async {
     final db = await database;
     final today = DateTime.now().toIso8601String().substring(0, 10);
-
     final result = await db.rawQuery(
       'SELECT IFNULL(SUM(total), 0) as total FROM sales WHERE dateTime LIKE ?',
       ['$today%'],
     );
-
-    final total = result.first['total'] as num;
-    return total.toDouble();
+    return (result.first['total'] as num).toDouble();
   }
 
   Future<int> getTodayOrdersCount() async {
     final db = await database;
     final today = DateTime.now().toIso8601String().substring(0, 10);
-
     final result = await db.rawQuery(
       'SELECT COUNT(*) as count FROM sales WHERE dateTime LIKE ?',
       ['$today%'],
     );
-
     return result.first['count'] as int;
   }
 
@@ -1857,49 +1774,38 @@ Future<Map<String, String?>> getCompanySettings() async {
   Future<double> getTodayPurchasesTotal() async {
     final db = await database;
     final today = DateTime.now().toIso8601String().substring(0, 10);
-
     final result = await db.rawQuery(
       'SELECT IFNULL(SUM(totalAmount), 0) as total FROM purchases WHERE date LIKE ?',
       ['$today%'],
     );
-
-    final total = result.first['total'] as num;
-    return total.toDouble();
+    return (result.first['total'] as num).toDouble();
   }
 
   Future<double> getTodayExpensesTotal() async {
     final db = await database;
     final today = DateTime.now().toIso8601String().substring(0, 10);
-
     final result = await db.rawQuery(
       'SELECT IFNULL(SUM(amount), 0) as total FROM expenses WHERE date LIKE ?',
       ['$today%'],
     );
-
-    final total = result.first['total'] as num;
-    return total.toDouble();
+    return (result.first['total'] as num).toDouble();
   }
 
   Future<double> getTotalReceivables() async {
     final db = await database;
-
     final result = await db.rawQuery(
       'SELECT IFNULL(SUM(openingBalance), 0) as total FROM customers WHERE (isActive = 1 OR isActive IS NULL) AND openingBalance > 0',
     );
-
-    final total = result.first['total'] as num;
-    return total.toDouble();
+    return (result.first['total'] as num).toDouble();
   }
 
+  /// Total payables = sum of all unpaid purchase balances across ALL suppliers
   Future<double> getTotalPayables() async {
     final db = await database;
-
     final result = await db.rawQuery(
-      'SELECT IFNULL(SUM(openingBalance), 0) as total FROM suppliers WHERE (isActive = 1 OR isActive IS NULL) AND openingBalance > 0',
+      'SELECT IFNULL(SUM(balance), 0) as total FROM purchases WHERE balance > 0',
     );
-
-    final total = result.first['total'] as num;
-    return total.toDouble();
+    return (result.first['total'] as num).toDouble();
   }
 
   Future<Map<String, dynamic>> getDashboardSummary() async {
@@ -1920,26 +1826,20 @@ Future<Map<String, String?>> getCompanySettings() async {
   // ============================================================================
 
   Future<Map<String, dynamic>> getProfitLossReport(
-    String from,
-    String to,
-  ) async {
+      String from, String to) async {
     final db = await database;
-
     final salesResult = await db.rawQuery(
       'SELECT IFNULL(SUM(total), 0) as total FROM sales WHERE dateTime BETWEEN ? AND ?',
       [from, '$to 23:59:59'],
     );
     double totalSales = (salesResult.first['total'] as num).toDouble();
 
-    final cogsResult = await db.rawQuery(
-      '''
+    final cogsResult = await db.rawQuery('''
       SELECT IFNULL(SUM(si.tradePrice * si.quantity), 0) as total
       FROM sale_items si
       INNER JOIN sales s ON si.saleId = s.id
       WHERE s.dateTime BETWEEN ? AND ?
-    ''',
-      [from, '$to 23:59:59'],
-    );
+    ''', [from, '$to 23:59:59']);
     double cogs = (cogsResult.first['total'] as num).toDouble();
 
     final expensesResult = await db.rawQuery(
@@ -1948,43 +1848,32 @@ Future<Map<String, String?>> getCompanySettings() async {
     );
     double totalExpenses = (expensesResult.first['total'] as num).toDouble();
 
-    double grossProfit = totalSales - cogs;
-    double netProfit = grossProfit - totalExpenses;
-
     return {
       'totalSales': totalSales,
       'costOfGoodsSold': cogs,
-      'grossProfit': grossProfit,
+      'grossProfit': totalSales - cogs,
       'totalExpenses': totalExpenses,
-      'netProfit': netProfit,
+      'netProfit': totalSales - cogs - totalExpenses,
     };
   }
 
   Future<double> getInventoryValue() async {
     final db = await database;
-
     final result = await db.rawQuery(
       'SELECT IFNULL(SUM(stock * tradePrice), 0) as total FROM products WHERE isActive = 1 OR isActive IS NULL',
     );
-
     return (result.first['total'] as num).toDouble();
   }
 
   Future<int> getLastInvoiceNumber() async {
-  final db = await database;
-
-  final result = await db.rawQuery(
-    "SELECT invoiceId FROM sales ORDER BY id DESC LIMIT 1"
-  );
-
-  if (result.isEmpty) return 1;
-
-  String lastInvoice = result.first['invoiceId'].toString();
-
-  int number = int.tryParse(lastInvoice.replaceAll('INV-', '')) ?? 0;
-
-  return number + 1;
-}
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT invoiceId FROM sales ORDER BY id DESC LIMIT 1",
+    );
+    if (result.isEmpty) return 1;
+    final lastInvoice = result.first['invoiceId'].toString();
+    return (int.tryParse(lastInvoice.replaceAll('INV-', '')) ?? 0) + 1;
+  }
 
   // ============================================================================
   // CATEGORIES CRUD OPERATIONS
@@ -1997,58 +1886,36 @@ Future<Map<String, String?>> getCompanySettings() async {
 
   Future<List<Category>> getAllCategories({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'categories',
-      where: where,
-      orderBy: 'name ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result =
+        await db.query('categories', where: where, orderBy: 'name ASC');
     return result.map((map) => Category.fromMap(map)).toList();
   }
 
   Future<Category?> getCategoryById(int id) async {
     final db = await instance.database;
-    final result = await db.query(
-      'categories',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result =
+        await db.query('categories', where: 'id = ?', whereArgs: [id]);
     if (result.isEmpty) return null;
     return Category.fromMap(result.first);
   }
 
   Future<int> updateCategory(Category category) async {
     final db = await instance.database;
-    return await db.update(
-      'categories',
-      category.toMap(),
-      where: 'id = ?',
-      whereArgs: [category.id],
-    );
+    return await db.update('categories', category.toMap(),
+        where: 'id = ?', whereArgs: [category.id]);
   }
 
   Future<int> deleteCategory(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'categories',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('categories', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> hardDeleteCategory(int id) async {
     final db = await instance.database;
-    return await db.delete(
-      'categories',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 
   // ============================================================================
@@ -2062,58 +1929,34 @@ Future<Map<String, String?>> getCompanySettings() async {
 
   Future<List<Brand>> getAllBrands({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'brands',
-      where: where,
-      orderBy: 'name ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result = await db.query('brands', where: where, orderBy: 'name ASC');
     return result.map((map) => Brand.fromMap(map)).toList();
   }
 
   Future<Brand?> getBrandById(int id) async {
     final db = await instance.database;
-    final result = await db.query(
-      'brands',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result = await db.query('brands', where: 'id = ?', whereArgs: [id]);
     if (result.isEmpty) return null;
     return Brand.fromMap(result.first);
   }
 
   Future<int> updateBrand(Brand brand) async {
     final db = await instance.database;
-    return await db.update(
-      'brands',
-      brand.toMap(),
-      where: 'id = ?',
-      whereArgs: [brand.id],
-    );
+    return await db.update('brands', brand.toMap(),
+        where: 'id = ?', whereArgs: [brand.id]);
   }
 
   Future<int> deleteBrand(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'brands',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('brands', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> hardDeleteBrand(int id) async {
     final db = await instance.database;
-    return await db.delete(
-      'brands',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('brands', where: 'id = ?', whereArgs: [id]);
   }
 
   // ============================================================================
@@ -2127,111 +1970,74 @@ Future<Map<String, String?>> getCompanySettings() async {
 
   Future<List<IssueUnit>> getAllIssueUnits({bool activeOnly = true}) async {
     final db = await instance.database;
-
     String? where;
-    if (activeOnly) {
-      where = 'isActive = 1 OR isActive IS NULL';
-    }
-
-    final result = await db.query(
-      'issue_units',
-      where: where,
-      orderBy: 'name ASC',
-    );
+    if (activeOnly) where = 'isActive = 1 OR isActive IS NULL';
+    final result =
+        await db.query('issue_units', where: where, orderBy: 'name ASC');
     return result.map((map) => IssueUnit.fromMap(map)).toList();
   }
 
   Future<IssueUnit?> getIssueUnitById(int id) async {
     final db = await instance.database;
-    final result = await db.query(
-      'issue_units',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result =
+        await db.query('issue_units', where: 'id = ?', whereArgs: [id]);
     if (result.isEmpty) return null;
     return IssueUnit.fromMap(result.first);
   }
 
   Future<int> updateIssueUnit(IssueUnit unit) async {
     final db = await instance.database;
-    return await db.update(
-      'issue_units',
-      unit.toMap(),
-      where: 'id = ?',
-      whereArgs: [unit.id],
-    );
+    return await db.update('issue_units', unit.toMap(),
+        where: 'id = ?', whereArgs: [unit.id]);
   }
 
   Future<int> deleteIssueUnit(int id) async {
     final db = await instance.database;
-    return await db.update(
-      'issue_units',
-      {'isActive': 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('issue_units', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> hardDeleteIssueUnit(int id) async {
     final db = await instance.database;
-    return await db.delete(
-      'issue_units',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('issue_units', where: 'id = ?', whereArgs: [id]);
   }
 
   // ============================================================================
   // UTILITY METHODS
   // ============================================================================
 
-  Future<void> resetDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'medical_store.db');
-
-    await close();
-    await deleteDatabase(path);
-    _database = null;
-
-    debugPrint('⚠️ DATABASE RESET COMPLETED - All data deleted!');
-  }
+Future<void> resetDatabase() async {
+  final path = await getDatabasePath(); // ← ab correct path use karega
+  await close();
+  await deleteDatabase(path);
+  _database = null;
+  debugPrint('⚠️ DATABASE RESET COMPLETED - All data deleted!');
+}
 
   Future<Map<String, dynamic>> getDatabaseInfo() async {
     final db = await database;
     final path = await getDatabasePath();
-
     final tables = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'",
     );
-
     Map<String, int> tableInfo = {};
     for (var table in tables) {
       final tableName = table['name'] as String;
-      final count = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM $tableName',
-      );
+      final count =
+          await db.rawQuery('SELECT COUNT(*) as count FROM $tableName');
       tableInfo[tableName] = count.first['count'] as int;
     }
-
-    return {'path': path, 'tables': tableInfo, 'version': 10};
+    return {'path': path, 'tables': tableInfo, 'version': 16};
   }
 
   Future<void> printDatabaseInfo() async {
     final info = await getDatabaseInfo();
-
     debugPrint('═══════════════════════════════════════════════════════════');
     debugPrint('📊 DATABASE INFORMATION');
-    debugPrint('═══════════════════════════════════════════════════════════');
     debugPrint('Path: ${info['path']}');
     debugPrint('Version: ${info['version']}');
-    debugPrint('───────────────────────────────────────────────────────────');
-    debugPrint('Tables and Record Counts:');
-
     final tables = info['tables'] as Map<String, int>;
-    tables.forEach((tableName, count) {
-      debugPrint('  • $tableName: $count records');
-    });
-
+    tables.forEach((name, count) => debugPrint('  • $name: $count records'));
     debugPrint('═══════════════════════════════════════════════════════════');
   }
 

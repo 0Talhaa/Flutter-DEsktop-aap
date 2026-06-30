@@ -14,7 +14,7 @@ import 'package:medical_app/services/database_helper.dart';
 import 'package:medical_app/Screens/dashboardScreen.dart';
 import 'package:medical_app/services/printer_service.dart';
 import 'package:medical_app/widgets/print_settings_dialog.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:medical_app/services/thermal_print_service_3inch.dart';
 import 'package:medical_app/services/thermal_print_service_6inch.dart';
@@ -69,6 +69,10 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
   final Map<int, FocusNode> unitFocusNodes = {};
   final Map<int, String> selectedUnits = {};
   final Map<int, Product> cartProductData = {};
+  final Map<int, TextEditingController> priceControllers = {};
+  final Map<int, FocusNode> priceFocusNodes = {};
+  final Map<int, TextEditingController> tpControllers = {};
+  final Map<int, FocusNode> tpFocusNodes = {};
 
   bool _isSubmittingQty = false;
   bool _isSubmittingDis = false;
@@ -350,6 +354,22 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
     return node;
   }
 
+  FocusNode _createPriceFocusNode(int productId) {
+  final node = FocusNode();
+  node.addListener(() {
+    if (!node.hasFocus && mounted) _commitPriceValue(productId);
+  });
+  return node;
+}
+
+FocusNode _createTpFocusNode(int productId) {
+  final node = FocusNode();
+  node.addListener(() {
+    if (!node.hasFocus && mounted) _commitTpValue(productId);
+  });
+  return node;
+}
+
   FocusNode _createDisFocusNode(int productId) {
     final node = FocusNode();
     node.addListener(() {
@@ -391,6 +411,26 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
     });
   }
 
+  void _commitPriceValue(int productId) {
+  final controller = priceControllers[productId];
+  if (controller == null) return;
+  final newPrice = double.tryParse(controller.text) ?? 0;
+  final index = cart.indexWhere((e) => e.productId == productId);
+  if (index == -1) return;
+  if (cart[index].price == newPrice) return;
+  setState(() => cart[index] = cart[index].copyWith(price: newPrice));
+}
+
+void _commitTpValue(int productId) {
+  final controller = tpControllers[productId];
+  if (controller == null) return;
+  final newTp = double.tryParse(controller.text) ?? 0;
+  final index = cart.indexWhere((e) => e.productId == productId);
+  if (index == -1) return;
+  if (cart[index].tradePrice == newTp) return;
+  setState(() => cart[index] = cart[index].copyWith(tradePrice: newTp));
+}
+
   void _commitDisValue(int productId) {
     final controller = disControllers[productId];
     if (controller == null) return;
@@ -421,6 +461,14 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
     selectedUnits.remove(productId);
     cartProductData.remove(productId);
     cart.removeWhere((item) => item.productId == productId);
+    priceControllers[productId]?.dispose();
+    priceControllers.remove(productId);
+    priceFocusNodes[productId]?.dispose();
+    priceFocusNodes.remove(productId);
+    tpControllers[productId]?.dispose();
+    tpControllers.remove(productId);
+    tpFocusNodes[productId]?.dispose();
+    tpFocusNodes.remove(productId);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -799,25 +847,28 @@ class _SaleScreenDesktopState extends State<SaleScreenDesktop> {
     });
   }
 
-  void _updateUnitSelection(
-      int productId, String newUnit, Product product, double newPrice) {
-    final index = cart.indexWhere((e) => e.productId == productId);
-    if (index == -1) return;
-    final item = cart[index];
-    final qty = item.quantity;
-    int baseQty = product.convertToBaseUnits(qty, newUnit);
-    double tradePrice = product.getTradePriceByUnit(newUnit);
-    setState(() {
-      selectedUnits[productId] = newUnit;
-      cart[index] = item.copyWith(
-          price: newPrice,
-          tradePrice: tradePrice,
-          unitType: newUnit,
-          baseQuantity: baseQty);
-    });
-    _snack('${product.itemName}: $newUnit @ ${currencyFormat.format(newPrice)}',
-        Colors.green);
-  }
+void _updateUnitSelection(
+    int productId, String newUnit, Product product, double newPrice) {
+  final index = cart.indexWhere((e) => e.productId == productId);
+  if (index == -1) return;
+  final item = cart[index];
+  final qty = item.quantity;
+  int baseQty = product.convertToBaseUnits(qty, newUnit);
+  double tradePrice = product.getTradePriceByUnit(newUnit);
+  setState(() {
+    selectedUnits[productId] = newUnit;
+    cart[index] = item.copyWith(
+        price: newPrice,
+        tradePrice: tradePrice,
+        unitType: newUnit,
+        baseQuantity: baseQty);
+  });
+  // ✅ update both controllers AFTER tradePrice is known
+  priceControllers[productId]?.text = newPrice.toStringAsFixed(0);
+  tpControllers[productId]?.text = tradePrice.toStringAsFixed(0);
+  _snack('${product.itemName}: $newUnit @ ${currencyFormat.format(newPrice)}',
+      Colors.green);
+}
 
   // ══════════════════════════════════════════════════════════════
   //  PRINT SIZE DIALOG
@@ -2234,33 +2285,105 @@ Future<void> _printInvoice() async {
   }
 
   Widget _buildPriceCell(SaleItem item, {int flex = 2, bool compact = false}) {
-    return Expanded(
-        flex: flex,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(currencyFormat.format(item.price),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: compact ? 10 : 12,
-                  color: Colors.green.shade700,
-                  fontWeight: FontWeight.w500)),
-        ));
+  final itemId = item.productId;
+  final controller = priceControllers[itemId];
+  final focusNode = priceFocusNodes[itemId];
+  if (controller == null || focusNode == null) {
+    return _buildDataCell(currencyFormat.format(item.price),
+        flex: flex, compact: compact);
   }
+  bool isReadOnly = _isSaleCompleted && !_isEditMode;
+  return Expanded(
+    flex: flex,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        readOnly: isReadOnly,
+        style: TextStyle(
+            fontSize: compact ? 10 : 12,
+            color: Colors.green.shade700,
+            fontWeight: FontWeight.w500),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
+        ],
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(
+              vertical: compact ? 6 : 8, horizontal: 3),
+          filled: true,
+          fillColor: isReadOnly
+              ? const Color(0xFFE0E0E0)
+              : Colors.green.shade50,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide:
+                  BorderSide(color: Colors.green.shade600, width: 2)),
+        ),
+        onSubmitted: (_) {
+          _commitPriceValue(itemId);
+          // move focus to TP field
+          tpFocusNodes[itemId]?.requestFocus();
+        },
+      ),
+    ),
+  );
+}
 
-  Widget _buildTraderPriceCell(SaleItem item,
-      {int flex = 2, bool compact = false}) {
-    return Expanded(
-        flex: flex,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(currencyFormat.format(item.tradePrice),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: compact ? 10 : 12,
-                  color: const Color.fromARGB(255, 249, 191, 2),
-                  fontWeight: FontWeight.w500)),
-        ));
+Widget _buildTraderPriceCell(SaleItem item,
+    {int flex = 2, bool compact = false}) {
+  final itemId = item.productId;
+  final controller = tpControllers[itemId];
+  final focusNode = tpFocusNodes[itemId];
+  if (controller == null || focusNode == null) {
+    return _buildDataCell(currencyFormat.format(item.tradePrice),
+        flex: flex, compact: compact);
   }
+  bool isReadOnly = _isSaleCompleted && !_isEditMode;
+  return Expanded(
+    flex: flex,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        readOnly: isReadOnly,
+        style: TextStyle(
+            fontSize: compact ? 10 : 12,
+            color: const Color(0xFFF59B02),
+            fontWeight: FontWeight.w500),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
+        ],
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(
+              vertical: compact ? 6 : 8, horizontal: 3),
+          filled: true,
+          fillColor: isReadOnly
+              ? const Color(0xFFE0E0E0)
+              : const Color(0xFFFFFBE6),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: const BorderSide(
+                  color: Color(0xFFF59B02), width: 2)),
+        ),
+        onSubmitted: (_) {
+          _commitTpValue(itemId);
+          _focusCartItemDis(
+              cart.indexWhere((e) => e.productId == itemId));
+        },
+      ),
+    ),
+  );
+}
 
   Widget _buildDeleteCell(SaleItem item, {int flex = 1}) {
     bool isReadOnly = _isSaleCompleted && !_isEditMode;
@@ -2317,11 +2440,11 @@ Future<void> _printInvoice() async {
                   borderSide: const BorderSide(color: Colors.blue, width: 2)),
             ),
             onSubmitted: (value) {
-              _isSubmittingQty = true;
-              _commitQtyValue(itemId);
-              _isSubmittingQty = false;
-              if (!mobile) _focusCartItemDis(index);
-            },
+            _isSubmittingQty = true;
+            _commitQtyValue(itemId);
+            _isSubmittingQty = false;
+            if (!mobile) priceFocusNodes[itemId]?.requestFocus();  // ✅ QTY → R.P
+          },
           ),
         ));
   }
@@ -2794,6 +2917,12 @@ Future<void> _printInvoice() async {
         disControllers[targetProductId] = TextEditingController(text: '0');
         disFocusNodes[targetProductId] = _createDisFocusNode(targetProductId);
         unitFocusNodes[targetProductId] = _createUnitFocusNode(targetProductId);
+        priceControllers[targetProductId] = TextEditingController(
+        text: defaultPrice.toStringAsFixed(0));
+        priceFocusNodes[targetProductId] = _createPriceFocusNode(targetProductId);
+        tpControllers[targetProductId] = TextEditingController(
+            text: (p.tradePrice ?? 0).toStringAsFixed(0));
+        tpFocusNodes[targetProductId] = _createTpFocusNode(targetProductId);
       }
       selectedCartIndex =
           cart.indexWhere((e) => e.productId == targetProductId);
@@ -2857,6 +2986,14 @@ Future<void> _printInvoice() async {
       for (var n in disFocusNodes.values) n.dispose();
       disFocusNodes.clear();
       for (var n in unitFocusNodes.values) n.dispose();
+      for (var c in priceControllers.values) c.dispose();
+      priceControllers.clear();
+      for (var n in priceFocusNodes.values) n.dispose();
+      priceFocusNodes.clear();
+      for (var c in tpControllers.values) c.dispose();
+      tpControllers.clear();
+      for (var n in tpFocusNodes.values) n.dispose();
+      tpFocusNodes.clear();
       unitFocusNodes.clear();
       selectedUnits.clear();
       cartProductData.clear();
@@ -3002,6 +3139,14 @@ Future<void> _printInvoice() async {
         for (var n in disFocusNodes.values) n.dispose();
         disFocusNodes.clear();
         for (var n in unitFocusNodes.values) n.dispose();
+        for (var c in priceControllers.values) c.dispose();
+        priceControllers.clear();
+        for (var n in priceFocusNodes.values) n.dispose();
+        priceFocusNodes.clear();
+        for (var c in tpControllers.values) c.dispose();
+        tpControllers.clear();
+        for (var n in tpFocusNodes.values) n.dispose();
+        tpFocusNodes.clear();
         unitFocusNodes.clear();
         selectedUnits.clear();
         cartProductData.clear();
@@ -3048,6 +3193,12 @@ Future<void> _printInvoice() async {
               TextEditingController(text: (item['discount'] ?? 0).toString());
           disFocusNodes[productId] = _createDisFocusNode(productId);
           unitFocusNodes[productId] = _createUnitFocusNode(productId);
+          priceControllers[productId] = TextEditingController(
+            text: (item['price'] as double).toStringAsFixed(0));
+        priceFocusNodes[productId] = _createPriceFocusNode(productId);
+        tpControllers[productId] = TextEditingController(
+            text: ((item['tradePrice'] ?? 0) as double).toStringAsFixed(0));
+        tpFocusNodes[productId] = _createTpFocusNode(productId);
         }
 
         amountPaidController.text = (sale['amountPaid'] ?? 0).toString();
@@ -3088,6 +3239,10 @@ Future<void> _printInvoice() async {
     for (var c in disControllers.values) c.dispose();
     for (var n in disFocusNodes.values) n.dispose();
     for (var n in unitFocusNodes.values) n.dispose();
+    for (var c in priceControllers.values) c.dispose();
+    for (var n in priceFocusNodes.values) n.dispose();
+    for (var c in tpControllers.values) c.dispose();
+    for (var n in tpFocusNodes.values) n.dispose();
     super.dispose();
   }
 }
